@@ -1,11 +1,20 @@
-export type Condition = 'new' | 'like_new' | 'used_good' | 'used_fair' | 'refurbished';
+export type Condition = 'new' | 'like_new' | 'used_good' | 'used_fair' | 'refurbished' | 'used';
 
-export type ListingStatus = 'draft' | 'pending_review' | 'active' | 'paused' | 'sold' | 'rejected';
+export type ListingStatus =
+  | 'draft'
+  | 'pending_review'
+  | 'waiting_for_review'
+  | 'active'
+  | 'paused'
+  | 'sold'
+  | 'rejected'
+  | 'expired';
 
 export interface CategoryFieldDef {
   key: string;
   label: string;
   type: 'text' | 'select' | 'number' | 'boolean';
+  required?: boolean;
   options?: string[];
   unit?: string;
 }
@@ -35,6 +44,12 @@ export interface Seller {
   verified: boolean;
 }
 
+export interface ListingImageItem {
+  id: string;
+  url: string;
+  is_cover?: boolean;
+}
+
 export interface Listing {
   id: string;
   title: string;
@@ -51,14 +66,44 @@ export interface Listing {
   landmark?: string;
   condition: Condition;
   images: string[];
+  images_meta?: ListingImageItem[];
   attributes: Record<string, string | number | boolean>;
   status: ListingStatus;
+  rejection_reason?: string;
   views_count: number;
   favorites_count: number;
   created_at: string;
   updated_at: string;
   seller: Seller;
   is_favorited?: boolean;
+  show_phone?: boolean;
+  contact?: {
+    show_phone: boolean;
+    telegram_username?: string;
+    email?: string;
+  };
+}
+
+export interface CreateDraftPayload {
+  title: string;
+  categoryId: string;
+  areaId: string;
+}
+
+export interface UpdateListingPayload {
+  title?: string;
+  categoryId?: string;
+  areaId?: string;
+  price?: number;
+  is_negotiable?: boolean;
+  condition?: 'new' | 'used' | Condition;
+  description?: string;
+  attributes?: Record<string, any>;
+  contact?: {
+    show_phone?: boolean;
+    telegram_username?: string;
+    email?: string;
+  };
 }
 
 export interface ListingsQuery {

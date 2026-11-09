@@ -65,9 +65,9 @@ export const MobileNav: React.FC = () => {
       <button
         onClick={() => {
           if (isAuthenticated) {
-            navigate('/browse');
+            navigate('/my/listings');
           } else {
-            navigate('/signin');
+            navigate('/signin?redirect=/my/listings');
           }
         }}
         className={`flex flex-col items-center justify-center gap-1 w-16 py-1 ${

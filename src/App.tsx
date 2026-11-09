@@ -11,6 +11,9 @@ import { ListingDetail } from './pages/ListingDetail';
 import { SignIn } from './pages/SignIn';
 import { SellerProfile } from './pages/SellerProfile';
 
+import { PostListing } from './pages/PostListing';
+import { MyListings } from './pages/MyListings';
+
 function AppContent() {
   const { path } = useRouter();
 
@@ -24,6 +27,10 @@ function AppContent() {
     pageContent = <ListingDetail id={listingMatch[1]} />;
   } else if (sellerMatch) {
     pageContent = <SellerProfile id={sellerMatch[1]} />;
+  } else if (path === '/post') {
+    pageContent = <PostListing />;
+  } else if (path === '/my/listings') {
+    pageContent = <MyListings />;
   } else if (path === '/browse') {
     pageContent = <Browse />;
   } else if (path === '/signin') {

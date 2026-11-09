@@ -177,6 +177,29 @@ export const Header: React.FC = () => {
                     <button
                       onClick={() => {
                         setIsProfileMenuOpen(false);
+                        navigate('/my/listings');
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-800 hover:bg-emerald-50 hover:text-emerald-800 flex items-center justify-between"
+                    >
+                      <span>My Classifieds</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                        Manage
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        navigate('/post');
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Post New Ad
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
                         navigate('/browse');
                       }}
                       className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
