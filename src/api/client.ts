@@ -10,6 +10,24 @@ import {
   ReportResponse,
   ApiErrorPayload,
 } from '../types';
+import {
+  buildAreaLookup,
+  buildCategoryLookup,
+  buildListingsParams,
+  mapCategories,
+  mapListing,
+  mapListingSummary,
+  mapReportReason,
+  mapSeller,
+  mapUser,
+  type ApiArea,
+  type ApiCategory,
+  type ApiListing,
+  type ApiListingSummary,
+  type ApiSeller,
+  type ApiUser,
+  type Lookups,
+} from './adapter';
 
 // Read configuration from Vite env
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
@@ -619,6 +637,18 @@ class ConeApiClient {
   private baseUrl: string;
   private useMock: boolean;
   private mockListings: Listing[];
+  private lookups: Lookups | null = null;
+
+  /** Real API only: load categories and areas once, so ids can be shown as names. */
+  private async getLookups(): Promise<Lookups> {
+    if (this.lookups) return this.lookups;
+    const [cats, areas] = await Promise.all([
+      this.request<{ items: ApiCategory[] }>('/categories'),
+      this.request<{ items: ApiArea[] }>('/areas'),
+    ]);
+    this.lookups = { ...buildCategoryLookup(cats.items), ...buildAreaLookup(areas.items) };
+    return this.lookups;
+  }
 
   constructor() {
     this.baseUrl = BASE_URL;
@@ -712,10 +742,11 @@ class ConeApiClient {
       };
     }
 
-    return this.request<{ success: boolean; message: string }>('/auth/otp/request', {
+    await this.request('/auth/otp/request', {
       method: 'POST',
       body: JSON.stringify({ phone }),
     });
+    return { success: true, message: `A 6-digit code was sent to ${phone}.` };
   }
 
   /**
@@ -768,20 +799,24 @@ class ConeApiClient {
       };
     }
 
-    const result = await this.request<AuthResponse>('/auth/otp/verify', {
+    const result = await this.request<{
+      token?: string;
+      user?: ApiUser;
+      mfaRequired?: boolean;
+    }>('/auth/otp/verify', {
       method: 'POST',
-      body: JSON.stringify({
-        phone,
-        code,
-        privacy_consent: privacyConsent,
-      }),
+      body: JSON.stringify({ phone, code, consent: privacyConsent }),
     });
 
-    if (result.token) {
-      setAuthToken(result.token);
+    if (result.mfaRequired || !result.token || !result.user) {
+      throw new ConeApiError(
+        'mfa_required',
+        'Staff accounts need a second step (authenticator code), which this app does not have yet.'
+      );
     }
 
-    return result;
+    setAuthToken(result.token);
+    return { token: result.token, user: mapUser(result.user) };
   }
 
   /**
@@ -807,7 +842,8 @@ class ConeApiClient {
       };
     }
 
-    return this.request<{ user: User }>('/auth/me');
+    const me = await this.request<ApiUser>('/me');
+    return { user: mapUser(me) };
   }
 
   /**
@@ -930,20 +966,21 @@ class ConeApiClient {
     }
 
     // Real API call
-    const params = new URLSearchParams();
-    if (query.page) params.set('page', String(query.page));
-    if (query.limit) params.set('limit', String(query.limit));
-    if (query.category) params.set('category', query.category);
-    if (query.subcategory) params.set('subcategory', query.subcategory);
-    if (query.area) params.set('area', query.area);
-    if (query.condition) params.set('condition', query.condition);
-    if (query.min_price) params.set('min_price', String(query.min_price));
-    if (query.max_price) params.set('max_price', String(query.max_price));
-    if (query.is_negotiable !== undefined) params.set('is_negotiable', String(query.is_negotiable));
-    if (query.q) params.set('q', query.q);
-    if (query.sort) params.set('sort', query.sort);
-
-    return this.request<ListingsResponse>(`/listings?${params.toString()}`);
+    const lookups = await this.getLookups();
+    const params = buildListingsParams(query, lookups);
+    const res = await this.request<{
+      items: ApiListingSummary[];
+      page: number;
+      pageSize: number;
+      total: number;
+    }>(`/listings?${params.toString()}`);
+    return {
+      listings: res.items.map((i) => mapListingSummary(i, lookups)),
+      total: res.total,
+      page: res.page,
+      limit: res.pageSize,
+      total_pages: Math.max(1, Math.ceil(res.total / res.pageSize)),
+    };
   }
 
   /**
@@ -969,7 +1006,9 @@ class ConeApiClient {
       };
     }
 
-    return this.request<Listing>(`/listings/${id}`);
+    const lookups = await this.getLookups();
+    const raw = await this.request<ApiListing>(`/listings/${id}`);
+    return mapListing(raw, lookups);
   }
 
   /**
@@ -995,12 +1034,14 @@ class ConeApiClient {
       };
     }
 
-    return this.request<RevealPhoneResponse>(`/listings/${listingId}/reveal-phone`, {
+    const res = await this.request<{ phone: string }>(`/listings/${listingId}/phone`, {
       method: 'POST',
       headers: {
         'X-Device-Id': deviceId,
       },
     });
+    saveStoredRevealedPhone(listingId, res.phone);
+    return { phone: res.phone, revealed_at: new Date().toISOString() };
   }
 
   /**
@@ -1009,6 +1050,11 @@ class ConeApiClient {
   async toggleFavorite(listingId: string): Promise<{ favorited: boolean }> {
     const favorites = getStoredFavorites();
     const isFav = favorites.has(listingId);
+
+    if (!this.useMock) {
+      // Server first: if the user is not signed in this throws and nothing is saved locally.
+      await this.request(`/listings/${listingId}/favorite`, { method: isFav ? 'DELETE' : 'PUT' });
+    }
 
     if (isFav) {
       favorites.delete(listingId);
@@ -1019,13 +1065,8 @@ class ConeApiClient {
 
     if (this.useMock) {
       await new Promise((res) => setTimeout(res, 150));
-      return { favorited: !isFav };
     }
-
-    return this.request<{ favorited: boolean }>(`/listings/${listingId}/favorite`, {
-      method: 'POST',
-      body: JSON.stringify({ favorited: !isFav }),
-    });
+    return { favorited: !isFav };
   }
 
   /**
@@ -1046,10 +1087,11 @@ class ConeApiClient {
       };
     }
 
-    return this.request<ReportResponse>(`/listings/${listingId}/report`, {
+    await this.request(`/listings/${listingId}/report`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ reason: mapReportReason(payload.reason), note: payload.details }),
     });
+    return { success: true, message: 'Report received. Our moderation team will review this ad.' };
   }
 
   /**
@@ -1059,7 +1101,10 @@ class ConeApiClient {
     if (this.useMock) {
       return [...MOCK_CATEGORIES];
     }
-    return this.request<Category[]>('/categories');
+    const lookups = await this.getLookups();
+    void lookups; // also warms the cache used by listings
+    const res = await this.request<{ items: ApiCategory[] }>('/categories');
+    return mapCategories(res.items);
   }
 
   /**
@@ -1069,7 +1114,8 @@ class ConeApiClient {
     if (this.useMock) {
       return [...ADDIS_ABABA_AREAS];
     }
-    return this.request<string[]>('/areas');
+    const res = await this.request<{ items: ApiArea[] }>('/areas');
+    return Array.from(new Set(res.items.map((a) => a.name)));
   }
 
   /**
@@ -1090,7 +1136,15 @@ class ConeApiClient {
       };
     }
 
-    return this.request<{ seller: any; listings: Listing[] }>(`/users/${sellerId}`);
+    const lookups = await this.getLookups();
+    const [seller, list] = await Promise.all([
+      this.request<ApiSeller>(`/sellers/${sellerId}`),
+      this.request<{ items: ApiListingSummary[] }>(`/sellers/${sellerId}/listings?pageSize=50`),
+    ]);
+    return {
+      seller: mapSeller(seller),
+      listings: list.items.map((i) => mapListingSummary(i, lookups)),
+    };
   }
 }
 
