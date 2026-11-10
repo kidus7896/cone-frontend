@@ -23,6 +23,10 @@ import {
   mapReportReason,
   mapSeller,
   mapUser,
+  mapFieldErrors,
+  resolveLeafCategoryId,
+  toApiStatusAction,
+  toApiStatusFilter,
   toApiCondition,
   resolveCategoryId,
   type ApiArea,
@@ -643,6 +647,7 @@ class ConeApiClient {
   private useMock: boolean;
   private mockListings: Listing[];
   private lookups: Lookups | null = null;
+  private categoryTree: ApiCategory[] = [];
 
   /** Real API only: load categories and areas once, so ids can be shown as names. */
   private async getLookups(): Promise<Lookups> {
@@ -651,6 +656,7 @@ class ConeApiClient {
       this.request<{ items: ApiCategory[] }>('/categories'),
       this.request<{ items: ApiArea[] }>('/areas'),
     ]);
+    this.categoryTree = cats.items;
     this.lookups = { ...buildCategoryLookup(cats.items), ...buildAreaLookup(areas.items) };
     return this.lookups;
   }
@@ -1221,7 +1227,7 @@ class ConeApiClient {
 
     const lookups = await this.getLookups();
     const areaId = lookups.areaNameToId.get(payload.areaId.toLowerCase()) ?? payload.areaId;
-    const categoryId = resolveCategoryId(payload.categoryId, lookups) ?? payload.categoryId;
+    const categoryId = resolveLeafCategoryId(payload.categoryId, undefined, this.categoryTree);
     const res = await this.request<ApiListing>('/listings', {
       method: 'POST',
       body: JSON.stringify({
@@ -1277,7 +1283,8 @@ class ConeApiClient {
     const body: any = {};
     if (payload.title !== undefined) body.title = payload.title.trim();
     if (payload.categoryId !== undefined) {
-      body.categoryId = resolveCategoryId(payload.categoryId, lookups) ?? payload.categoryId;
+      const sub = (payload.attributes as any)?.subcategory as string | undefined;
+      body.categoryId = resolveLeafCategoryId(payload.categoryId, sub, this.categoryTree);
     }
     if (payload.areaId !== undefined) {
       body.areaId = lookups.areaNameToId.get(payload.areaId.toLowerCase()) ?? payload.areaId;
@@ -1286,7 +1293,11 @@ class ConeApiClient {
     if (payload.is_negotiable !== undefined) body.negotiable = payload.is_negotiable;
     if (payload.condition !== undefined) body.condition = toApiCondition(payload.condition) ?? 'used';
     if (payload.description !== undefined) body.description = payload.description.trim();
-    if (payload.attributes !== undefined) body.attributes = payload.attributes;
+    if (payload.attributes !== undefined) {
+      // "subcategory" is an app-side helper; the backend stores it as the leaf categoryId.
+      const { subcategory: _sub, ...rest } = payload.attributes as Record<string, any>;
+      body.attributes = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined && v !== ''));
+    }
     if (payload.contact) {
       body.contact = {
         showPhone: payload.contact.show_phone ?? true,
@@ -1456,9 +1467,15 @@ class ConeApiClient {
     }
 
     const lookups = await this.getLookups();
-    const res = await this.request<ApiListing>(`/listings/${listingId}/submit`, {
-      method: 'POST',
-    });
+    let res: ApiListing;
+    try {
+      res = await this.request<ApiListing>(`/listings/${listingId}/submit`, { method: 'POST' });
+    } catch (err) {
+      if (err instanceof ConeApiError && err.fields) {
+        throw new ConeApiError(err.code, err.message, mapFieldErrors(err.fields));
+      }
+      throw err;
+    }
     return mapListing(res, lookups);
   }
 
@@ -1488,11 +1505,12 @@ class ConeApiClient {
     }
 
     const lookups = await this.getLookups();
-    const query = statusFilter && statusFilter !== 'all' ? `?status=${statusFilter}` : '';
-    const res = await this.request<{ items: ApiListingSummary[]; total?: number }>(`/me/listings${query}`);
+    const apiStatus = toApiStatusFilter(statusFilter);
+    const query = apiStatus ? `?status=${apiStatus}&pageSize=50` : '?pageSize=50';
+    const res = await this.request<{ items: ApiListing[]; total?: number }>(`/me/listings${query}`);
 
     return {
-      listings: (res.items || []).map((i) => mapListingSummary(i, lookups)),
+      listings: (res.items || []).map((i) => mapListing(i, lookups)),
       total: res.total ?? res.items?.length ?? 0,
     };
   }
@@ -1528,7 +1546,7 @@ class ConeApiClient {
     const lookups = await this.getLookups();
     const res = await this.request<ApiListing>(`/listings/${listingId}/status`, {
       method: 'POST',
-      body: JSON.stringify({ status: statusOrAction }),
+      body: JSON.stringify({ action: toApiStatusAction(statusOrAction) }),
     });
     return mapListing(res, lookups);
   }

@@ -51,7 +51,8 @@ export interface ApiListing {
   attributes: Record<string, string | number | boolean>;
   images: Array<{ id: string; url: string; thumbUrl: string; order: number }>;
   contact: { showPhone: boolean; telegram: string | null; email: string | null };
-  status: Listing['status'] | 'expired';
+  status: Listing['status'];
+  rejectReason?: string | null;
   seller: ApiSeller;
   isFavorite?: boolean;
   createdAt: string;
@@ -69,7 +70,7 @@ export interface ApiUser {
 // ---------- Lookups built from /categories and /areas ----------
 
 export interface Lookups {
-  categoryById: Map<string, { name: string; parentName?: string }>;
+  categoryById: Map<string, { name: string; parentId?: string; parentName?: string }>;
   categoryKeyToId: Map<string, string>; // id, slug, or slug with underscores -> id
   areaById: Map<string, string>;
   areaNameToId: Map<string, string>;
@@ -79,7 +80,7 @@ export function buildCategoryLookup(items: ApiCategory[]): Pick<Lookups, 'catego
   const categoryById: Lookups['categoryById'] = new Map();
   const categoryKeyToId: Lookups['categoryKeyToId'] = new Map();
   const add = (c: ApiCategory, parentName?: string) => {
-    categoryById.set(c.id, { name: c.name, parentName });
+    categoryById.set(c.id, { name: c.name, parentId: c.parentId ?? undefined, parentName });
     categoryKeyToId.set(c.id.toLowerCase(), c.id);
     categoryKeyToId.set(c.slug.toLowerCase(), c.id);
     categoryKeyToId.set(c.slug.toLowerCase().replace(/-/g, '_'), c.id);
@@ -182,7 +183,7 @@ export function mapListingSummary(s: ApiListingSummary, lookups: Lookups): Listi
     price: s.priceEtb,
     currency: 'ETB',
     is_negotiable: s.negotiable,
-    category_id: s.categoryId,
+    category_id: cat?.parentId ?? s.categoryId,
     category_name: cat?.parentName ?? cat?.name ?? '',
     subcategory: cat?.parentName ? cat.name : undefined,
     area: s.areaName,
@@ -210,14 +211,24 @@ export function mapListing(l: ApiListing, lookups: Lookups): Listing {
     price: l.priceEtb,
     currency: 'ETB',
     is_negotiable: l.negotiable,
-    category_id: l.categoryId,
+    category_id: cat?.parentId ?? l.categoryId,
     category_name: cat?.parentName ?? cat?.name ?? '',
     subcategory: cat?.parentName ? cat.name : undefined,
     area: lookups.areaById.get(l.areaId) ?? '',
     condition: toFrontendCondition(l.condition),
     images: [...l.images].sort((a, b) => a.order - b.order).map((i) => i.url),
     attributes: l.attributes ?? {},
-    status: l.status === 'expired' ? 'paused' : l.status,
+    status: l.status,
+    rejection_reason: l.rejectReason ?? undefined,
+    show_phone: l.contact?.showPhone,
+    contact: {
+      show_phone: l.contact?.showPhone ?? true,
+      telegram_username: seller.telegram_username,
+      email: l.contact?.email ?? undefined,
+    },
+    images_meta: [...l.images]
+      .sort((x, y) => x.order - y.order)
+      .map((i, idx) => ({ id: i.id, url: i.url, is_cover: idx === 0 })),
     views_count: 0,
     favorites_count: 0,
     created_at: l.createdAt,
@@ -266,4 +277,41 @@ export function mapReportReason(reason: ReportPayload['reason']): string {
     default:
       return 'other'; // spam, sold, other
   }
+}
+
+// Leaf category the backend needs: the app keeps the parent id plus a subcategory name.
+export function resolveLeafCategoryId(
+  parentKey: string,
+  subcategoryName: string | undefined,
+  tree: ApiCategory[]
+): string {
+  const parent = tree.find((c) => c.id === parentKey || c.slug === parentKey);
+  if (!parent) return parentKey;
+  const children = parent.children ?? [];
+  if (children.length === 0) return parent.id;
+  const child = children.find((c) => c.name.toLowerCase() === (subcategoryName ?? '').toLowerCase());
+  return (child ?? children[0]).id;
+}
+
+// Backend field names -> the names the pages look for.
+export function mapFieldErrors(fields?: Record<string, string>): Record<string, string> | undefined {
+  if (!fields) return fields;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    out[k === 'priceEtb' ? 'price' : k === 'photos' ? 'images' : k] = v;
+  }
+  return out;
+}
+
+export function toApiStatusAction(a: string): string {
+  const x = a.toLowerCase();
+  if (x === 'sold' || x === 'mark_sold') return 'mark_sold';
+  if (x === 'paused' || x === 'pause') return 'pause';
+  if (x === 'active' || x === 'resume') return 'resume';
+  return x; // renew
+}
+
+export function toApiStatusFilter(s?: string): string | undefined {
+  if (!s || s === 'all') return undefined;
+  return s === 'waiting_for_review' ? 'pending_review' : s;
 }
