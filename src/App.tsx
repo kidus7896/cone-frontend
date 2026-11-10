@@ -48,6 +48,9 @@ function AppContent() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 font-sans antialiased selection:bg-emerald-500 selection:text-white">
       {!isSignInScreen && <Header />}
+      {!isSignInScreen && (
+        <div className="h-[132px] md:h-[88px] flex-shrink-0" aria-hidden="true" />
+      )}
       <main className="flex-1">{pageContent}</main>
       {!isSignInScreen && <Footer />}
       <MobileNav />

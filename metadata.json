@@ -2,5 +2,7 @@
   "name": "Cone - Addis Ababa Classifieds",
   "description": "Clean, modern community classifieds marketplace for Addis Ababa, Ethiopia. Buy, sell, and discover vehicles, apartments, electronics, and jobs locally.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

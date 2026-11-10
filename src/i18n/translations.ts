@@ -42,7 +42,7 @@ export const translations = {
       popularSearches: 'Popular:',
       exploreCategories: 'Explore by Category',
       popularAreas: 'Popular Neighborhoods',
-      newestListings: 'Newest in Addis Ababa',
+      newestListings: 'Explore',
       viewAllListings: 'View all listings',
       safetyTipTitle: 'Cone Safety in Addis Ababa',
       safetyTipBody: 'Always meet sellers in busy public places (like Edna Mall, Dembel, or Kazanchis) and inspect goods before making payments. Never send advance deposits.',

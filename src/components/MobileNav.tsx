@@ -12,7 +12,10 @@ export const MobileNav: React.FC = () => {
   const isSignIn = path === '/signin';
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-slate-200 bg-white/95 px-2 backdrop-blur-md md:hidden">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-slate-200 bg-white/95 px-2 backdrop-blur-md lg:hidden"
+      style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }}
+    >
       {/* Home */}
       <button
         onClick={() => navigate('/')}

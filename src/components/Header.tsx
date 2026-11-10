@@ -39,7 +39,10 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur-md">
+    <header
+      className="fixed top-0 left-0 right-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur-md"
+      style={{ position: 'fixed', top: 0, left: 0, right: 0 }}
+    >
       {/* Top micro-bar for city & announcement */}
       <div className="bg-slate-900 text-slate-300 text-xs py-1 px-4">
         <div className="mx-auto flex max-w-7xl items-center justify-between">

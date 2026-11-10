@@ -481,21 +481,21 @@ export const Browse: React.FC = () => {
           {/* Listings Grid & Pagination */}
           <div className="col-span-1 md:col-span-3">
             {isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-5">
                 {[...Array(6)].map((_, i) => (
                   <div
                     key={i}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 animate-pulse space-y-3"
+                    className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-2.5 sm:p-4 animate-pulse space-y-2 sm:space-y-3"
                   >
-                    <div className="aspect-[4/3] bg-slate-200 rounded-xl" />
-                    <div className="h-4 bg-slate-200 rounded w-3/4" />
-                    <div className="h-5 bg-slate-200 rounded w-1/2" />
+                    <div className="aspect-[4/3] bg-slate-200 rounded-lg sm:rounded-xl" />
+                    <div className="h-3 sm:h-4 bg-slate-200 rounded w-3/4" />
+                    <div className="h-4 sm:h-5 bg-slate-200 rounded w-1/2" />
                   </div>
                 ))}
               </div>
             ) : listings.length > 0 ? (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-5">
                   {listings.map((item) => (
                     <ListingCard key={item.id} listing={item} />
                   ))}

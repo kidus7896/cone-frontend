@@ -9,6 +9,9 @@ import {
   ReportPayload,
   ReportResponse,
   ApiErrorPayload,
+  CreateDraftPayload,
+  UpdateListingPayload,
+  ListingStatus,
 } from '../types';
 import {
   buildAreaLookup,
@@ -20,6 +23,8 @@ import {
   mapReportReason,
   mapSeller,
   mapUser,
+  toApiCondition,
+  resolveCategoryId,
   type ApiArea,
   type ApiCategory,
   type ApiListing,
@@ -1145,6 +1150,387 @@ class ConeApiClient {
       seller: mapSeller(seller),
       listings: list.items.map((i) => mapListingSummary(i, lookups)),
     };
+  }
+
+  // -----------------------------------------------------------
+  // POST & MANAGE LISTING ENDPOINTS
+  // -----------------------------------------------------------
+
+  /**
+   * Create a new draft listing (POST /listings)
+   */
+  async createDraft(payload: CreateDraftPayload): Promise<Listing> {
+    if (!payload.title || payload.title.trim().length < 5) {
+      throw new ConeApiError('VALIDATION_ERROR', 'Title must be between 5 and 120 characters.', {
+        title: 'Title must be at least 5 characters long',
+      });
+    }
+    if (!payload.categoryId) {
+      throw new ConeApiError('VALIDATION_ERROR', 'Category selection is required.', {
+        category: 'Please select a leaf category',
+      });
+    }
+    if (!payload.areaId) {
+      throw new ConeApiError('VALIDATION_ERROR', 'Area selection is required.', {
+        area: 'Please select an area in Addis Ababa',
+      });
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 250));
+      const draftId = `cone-draft-${Date.now()}`;
+      const cat = MOCK_CATEGORIES.find((c) => c.id === payload.categoryId) || MOCK_CATEGORIES[0];
+
+      const newDraft: Listing = {
+        id: draftId,
+        title: payload.title.trim(),
+        slug: payload.title.trim().toLowerCase().replace(/\s+/g, '-'),
+        description: '',
+        price: 0,
+        currency: 'ETB',
+        is_negotiable: false,
+        category_id: payload.categoryId,
+        category_name: cat.name,
+        area: payload.areaId,
+        condition: 'used',
+        images: [],
+        images_meta: [],
+        attributes: {},
+        status: 'draft',
+        views_count: 0,
+        favorites_count: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        show_phone: true,
+        contact: {
+          show_phone: true,
+        },
+        seller: {
+          id: 'usr_me_01',
+          name: 'Addis Ababa Resident',
+          phone_masked: '+251 91 ••• ••67',
+          phone_revealed: '+251 91 123 4567',
+          joined_at: '2024-02-01',
+          verified: true,
+        },
+      };
+
+      this.mockListings.unshift(newDraft);
+      return newDraft;
+    }
+
+    const lookups = await this.getLookups();
+    const areaId = lookups.areaNameToId.get(payload.areaId.toLowerCase()) ?? payload.areaId;
+    const categoryId = resolveCategoryId(payload.categoryId, lookups) ?? payload.categoryId;
+    const res = await this.request<ApiListing>('/listings', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: payload.title.trim(),
+        categoryId,
+        areaId,
+      }),
+    });
+    return mapListing(res, lookups);
+  }
+
+  /**
+   * Update listing details (PATCH /listings/{id})
+   */
+  async updateListing(id: string, payload: UpdateListingPayload): Promise<Listing> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      const idx = this.mockListings.findIndex((l) => l.id === id);
+      if (idx === -1) {
+        throw new ConeApiError('NOT_FOUND', `Listing ${id} not found`);
+      }
+
+      const existing = this.mockListings[idx];
+      const cat = payload.categoryId
+        ? MOCK_CATEGORIES.find((c) => c.id === payload.categoryId) || { name: existing.category_name }
+        : { name: existing.category_name };
+
+      const updated: Listing = {
+        ...existing,
+        title: payload.title !== undefined ? payload.title.trim() : existing.title,
+        category_id: payload.categoryId || existing.category_id,
+        category_name: cat.name,
+        area: payload.areaId || existing.area,
+        price: payload.price !== undefined ? Math.round(Number(payload.price)) : existing.price,
+        is_negotiable: payload.is_negotiable !== undefined ? payload.is_negotiable : existing.is_negotiable,
+        condition: (payload.condition as any) || existing.condition,
+        description: payload.description !== undefined ? payload.description.trim() : existing.description,
+        attributes: payload.attributes ? { ...existing.attributes, ...payload.attributes } : existing.attributes,
+        show_phone: payload.contact?.show_phone !== undefined ? payload.contact.show_phone : existing.show_phone,
+        contact: {
+          show_phone: payload.contact?.show_phone !== undefined ? payload.contact.show_phone : existing.show_phone ?? true,
+          telegram_username: payload.contact?.telegram_username ?? existing.contact?.telegram_username,
+          email: payload.contact?.email ?? existing.contact?.email,
+        },
+        updated_at: new Date().toISOString(),
+      };
+
+      this.mockListings[idx] = updated;
+      return updated;
+    }
+
+    const lookups = await this.getLookups();
+    const body: any = {};
+    if (payload.title !== undefined) body.title = payload.title.trim();
+    if (payload.categoryId !== undefined) {
+      body.categoryId = resolveCategoryId(payload.categoryId, lookups) ?? payload.categoryId;
+    }
+    if (payload.areaId !== undefined) {
+      body.areaId = lookups.areaNameToId.get(payload.areaId.toLowerCase()) ?? payload.areaId;
+    }
+    if (payload.price !== undefined) body.priceEtb = Math.round(Number(payload.price));
+    if (payload.is_negotiable !== undefined) body.negotiable = payload.is_negotiable;
+    if (payload.condition !== undefined) body.condition = toApiCondition(payload.condition) ?? 'used';
+    if (payload.description !== undefined) body.description = payload.description.trim();
+    if (payload.attributes !== undefined) body.attributes = payload.attributes;
+    if (payload.contact) {
+      body.contact = {
+        showPhone: payload.contact.show_phone ?? true,
+        telegram: payload.contact.telegram_username
+          ? `https://t.me/${payload.contact.telegram_username.replace('@', '')}`
+          : null,
+        email: payload.contact.email?.trim() || null,
+      };
+    }
+
+    const res = await this.request<ApiListing>(`/listings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    return mapListing(res, lookups);
+  }
+
+  /**
+   * Upload an image to a listing (POST /listings/{id}/images)
+   */
+  async uploadListingImage(
+    listingId: string,
+    file: File
+  ): Promise<{ id: string; url: string; is_cover?: boolean }> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 350));
+      const listing = this.mockListings.find((l) => l.id === listingId);
+      if (!listing) {
+        throw new ConeApiError('NOT_FOUND', `Listing ${listingId} not found`);
+      }
+
+      const imgId = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const url = URL.createObjectURL(file);
+      const isFirst = !listing.images || listing.images.length === 0;
+      const imgMeta = { id: imgId, url, is_cover: isFirst };
+
+      listing.images = [...(listing.images || []), url];
+      listing.images_meta = [...(listing.images_meta || []), imgMeta];
+
+      return imgMeta;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = getAuthToken();
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${this.baseUrl}/listings/${listingId}/images`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new ConeApiError(
+        data?.error?.code || 'UPLOAD_FAILED',
+        data?.error?.message || 'Failed to upload photo',
+        data?.error?.fields
+      );
+    }
+
+    return {
+      id: data.id || `img_${Date.now()}`,
+      url: data.url,
+      is_cover: !!(data.isCover || data.is_cover),
+    };
+  }
+
+  /**
+   * Delete an image from a listing (DELETE /listings/{id}/images/{imageId})
+   */
+  async deleteListingImage(listingId: string, imageId: string): Promise<{ success: boolean }> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      const listing = this.mockListings.find((l) => l.id === listingId);
+      if (listing) {
+        const found = listing.images_meta?.find((m) => m.id === imageId);
+        const urlToRemove = found ? found.url : null;
+        listing.images_meta = (listing.images_meta || []).filter((m) => m.id !== imageId);
+        if (urlToRemove) {
+          listing.images = (listing.images || []).filter((u) => u !== urlToRemove);
+        } else if (listing.images.length > 0) {
+          listing.images.splice(0, 1);
+        }
+      }
+      return { success: true };
+    }
+
+    return this.request<{ success: boolean }>(`/listings/${listingId}/images/${imageId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Reorder listing images (POST /listings/{id}/images/order with { imageIds })
+   */
+  async reorderListingImages(listingId: string, imageIds: string[]): Promise<{ success: boolean }> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 150));
+      const listing = this.mockListings.find((l) => l.id === listingId);
+      if (listing && listing.images_meta) {
+        const orderedMeta: Array<{ id: string; url: string; is_cover?: boolean }> = [];
+        const orderedUrls: string[] = [];
+        imageIds.forEach((id, idx) => {
+          const match = listing.images_meta?.find((m) => m.id === id);
+          if (match) {
+            orderedMeta.push({ ...match, is_cover: idx === 0 });
+            orderedUrls.push(match.url);
+          }
+        });
+        listing.images_meta = orderedMeta;
+        listing.images = orderedUrls;
+      }
+      return { success: true };
+    }
+
+    return this.request<{ success: boolean }>(`/listings/${listingId}/images/order`, {
+      method: 'POST',
+      body: JSON.stringify({ imageIds }),
+    });
+  }
+
+  /**
+   * Submit listing for review (POST /listings/{id}/submit)
+   */
+  async submitListing(listingId: string): Promise<Listing> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 350));
+      const listing = this.mockListings.find((l) => l.id === listingId);
+      if (!listing) {
+        throw new ConeApiError('NOT_FOUND', `Listing ${listingId} not found`);
+      }
+
+      const fields: Record<string, string> = {};
+      if (!listing.title || listing.title.length < 5) {
+        fields.title = 'Title must be at least 5 characters long';
+      } else if (listing.title.length > 120) {
+        fields.title = 'Title cannot exceed 120 characters';
+      }
+
+      if (!listing.description || listing.description.length < 20) {
+        fields.description = 'Description must be at least 20 characters long';
+      }
+
+      if (!listing.price || listing.price <= 0) {
+        fields.price = 'Please enter a valid price in ETB (whole number)';
+      }
+
+      if (!listing.images || listing.images.length === 0) {
+        fields.images = 'Please upload at least 1 photo for your listing';
+      }
+
+      if (Object.keys(fields).length > 0) {
+        throw new ConeApiError(
+          'VALIDATION_FAILED',
+          'Please complete all required fields before submitting your ad for review.',
+          fields
+        );
+      }
+
+      listing.status = 'waiting_for_review';
+      listing.updated_at = new Date().toISOString();
+      return listing;
+    }
+
+    const lookups = await this.getLookups();
+    const res = await this.request<ApiListing>(`/listings/${listingId}/submit`, {
+      method: 'POST',
+    });
+    return mapListing(res, lookups);
+  }
+
+  /**
+   * Get user's own listings (GET /me/listings?status={status})
+   */
+  async getMyListings(statusFilter?: string): Promise<{ listings: Listing[]; total: number }> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      let userListings = this.mockListings.filter(
+        (l) => l.seller.id === 'usr_me_01' || l.id.startsWith('cone-my-') || l.id.startsWith('cone-draft-')
+      );
+
+      if (statusFilter && statusFilter !== 'all') {
+        userListings = userListings.filter((l) => {
+          if (statusFilter === 'waiting_for_review') {
+            return l.status === 'waiting_for_review' || l.status === 'pending_review';
+          }
+          return l.status === statusFilter;
+        });
+      }
+
+      return {
+        listings: userListings,
+        total: userListings.length,
+      };
+    }
+
+    const lookups = await this.getLookups();
+    const query = statusFilter && statusFilter !== 'all' ? `?status=${statusFilter}` : '';
+    const res = await this.request<{ items: ApiListingSummary[]; total?: number }>(`/me/listings${query}`);
+
+    return {
+      listings: (res.items || []).map((i) => mapListingSummary(i, lookups)),
+      total: res.total ?? res.items?.length ?? 0,
+    };
+  }
+
+  /**
+   * Change listing status: pause, resume, sold, renew (POST /listings/{id}/status)
+   */
+  async updateListingStatus(listingId: string, statusOrAction: string): Promise<Listing> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 250));
+      const listing = this.mockListings.find((l) => l.id === listingId);
+      if (!listing) {
+        throw new ConeApiError('NOT_FOUND', `Listing ${listingId} not found`);
+      }
+
+      const action = statusOrAction.toLowerCase();
+      if (action === 'pause' || action === 'paused') {
+        listing.status = 'paused';
+      } else if (action === 'resume' || action === 'active') {
+        listing.status = 'active';
+      } else if (action === 'sold') {
+        listing.status = 'sold';
+      } else if (action === 'renew') {
+        listing.status = 'active';
+        listing.updated_at = new Date().toISOString();
+      } else {
+        listing.status = statusOrAction as ListingStatus;
+      }
+
+      return listing;
+    }
+
+    const lookups = await this.getLookups();
+    const res = await this.request<ApiListing>(`/listings/${listingId}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status: statusOrAction }),
+    });
+    return mapListing(res, lookups);
   }
 }
 

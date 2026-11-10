@@ -45,9 +45,9 @@ export const SellerProfile: React.FC<SellerProfileProps> = ({ id }) => {
     return (
       <div className="mx-auto max-w-6xl px-4 py-12 animate-pulse space-y-4">
         <div className="h-20 bg-slate-200 rounded-2xl w-full" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="h-64 bg-slate-200 rounded-2xl" />
-          <div className="h-64 bg-slate-200 rounded-2xl" />
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
+          <div className="h-56 sm:h-64 bg-slate-200 rounded-xl sm:rounded-2xl" />
+          <div className="h-56 sm:h-64 bg-slate-200 rounded-xl sm:rounded-2xl" />
         </div>
       </div>
     );
@@ -125,7 +125,7 @@ export const SellerProfile: React.FC<SellerProfileProps> = ({ id }) => {
         </h2>
 
         {listings.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
             {listings.map((item) => (
               <ListingCard key={item.id} listing={item} />
             ))}
