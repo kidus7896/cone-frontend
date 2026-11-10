@@ -38,9 +38,8 @@ import {
   type Lookups,
 } from './adapter';
 
-// Read configuration from Vite env
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'; // Default to true for out-of-the-box readiness
+// Backend address and mock switch live in ./config
+import { API_BASE_URL as BASE_URL, USE_MOCK } from './config';
 
 const TOKEN_KEY = 'cone_auth_token';
 const DEVICE_ID_KEY = 'cone_device_id';
