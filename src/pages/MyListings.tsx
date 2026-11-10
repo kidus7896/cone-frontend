@@ -57,6 +57,28 @@ export const MyListings: React.FC = () => {
   // Status update in progress
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  // Delete listing dialog state
+  const [listingToDelete, setListingToDelete] = useState<Listing | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  const handleDeleteListing = async () => {
+    if (!listingToDelete) return;
+    try {
+      setIsDeleting(true);
+      setError(null);
+      await apiClient.deleteListing(listingToDelete.id);
+      setListings((prev) => prev.filter((l) => l.id !== listingToDelete.id));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+      setActionSuccessMessage('Listing deleted successfully.');
+      setListingToDelete(null);
+      setTimeout(() => setActionSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   useEffect(() => {
     setMeta('My Classifieds Listings - Cone Addis Ababa', 'Manage, edit, pause, and renew your ads in Addis Ababa.');
 
@@ -394,6 +416,17 @@ export const MyListings: React.FC = () => {
                             <span>Renew Listing</span>
                           </button>
                         )}
+
+                        {/* Delete button (with confirm dialog) */}
+                        <button
+                          disabled={isBusy}
+                          onClick={() => setListingToDelete(item)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 ml-auto transition-colors disabled:opacity-60"
+                          title="Delete this listing"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                          <span>Delete</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -422,6 +455,68 @@ export const MyListings: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {listingToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Delete Listing?
+                </h3>
+                <p className="text-xs text-slate-500">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            {/* If live/active, show mandatory warning: "This ad will disappear from Cone." */}
+            {listingToDelete.status === 'active' && (
+              <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <span className="font-bold">
+                  This ad will disappear from Cone.
+                </span>
+              </div>
+            )}
+
+            <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+              Are you sure you want to permanently delete{' '}
+              <strong className="text-slate-900">"{listingToDelete.title}"</strong>?
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setListingToDelete(null)}
+                className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteListing}
+                className="inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 px-5 py-2 text-xs font-bold text-white transition-all disabled:opacity-60 shadow-xs"
+              >
+                {isDeleting ? (
+                  <>
+                    <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete Ad</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

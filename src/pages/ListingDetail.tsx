@@ -22,7 +22,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { Listing, ReportPayload } from '../types';
-import { apiClient } from '../api/client';
+import { apiClient, getAuthToken } from '../api/client';
 import { useRouter } from '../context/RouterContext';
 import { useLanguage } from '../context/LanguageContext';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -131,14 +131,23 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ id }) => {
 
   const handleToggleFavorite = async () => {
     if (!listing || isTogglingFavorite) return;
+
+    if (!getAuthToken()) {
+      navigate(`/signin?redirect=${encodeURIComponent(`/listing/${listing.id}`)}`);
+      return;
+    }
+
     setIsTogglingFavorite(true);
     const nextState = !isFavorited;
     setIsFavorited(nextState);
 
     try {
       await apiClient.toggleFavorite(listing.id);
-    } catch {
+    } catch (err: any) {
       setIsFavorited(!nextState);
+      if (err?.code === 'UNAUTHENTICATED') {
+        navigate(`/signin?redirect=${encodeURIComponent(`/listing/${listing.id}`)}`);
+      }
     } finally {
       setIsTogglingFavorite(false);
     }

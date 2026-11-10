@@ -13,6 +13,8 @@ import { SellerProfile } from './pages/SellerProfile';
 
 import { PostListing } from './pages/PostListing';
 import { MyListings } from './pages/MyListings';
+import { Favorites } from './pages/Favorites';
+import { Account } from './pages/Account';
 
 function AppContent() {
   const { path } = useRouter();
@@ -31,6 +33,10 @@ function AppContent() {
     pageContent = <PostListing />;
   } else if (path === '/my/listings') {
     pageContent = <MyListings />;
+  } else if (path === '/my/favorites') {
+    pageContent = <Favorites />;
+  } else if (path === '/account') {
+    pageContent = <Account />;
   } else if (path === '/browse') {
     pageContent = <Browse />;
   } else if (path === '/signin') {

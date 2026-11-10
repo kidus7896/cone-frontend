@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Heart, MapPin, Clock, Tag } from 'lucide-react';
 import { Listing } from '../types';
-import { apiClient } from '../api/client';
+import { apiClient, getAuthToken } from '../api/client';
 import { useRouter } from '../context/RouterContext';
 
 interface ListingCardProps {
@@ -10,7 +10,7 @@ interface ListingCardProps {
 }
 
 export const ListingCard: React.FC<ListingCardProps> = ({ listing, onFavoriteToggle }) => {
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
   const [isFavorited, setIsFavorited] = useState(!!listing.is_favorited);
   const [isTogglingFav, setIsTogglingFav] = useState(false);
 
@@ -26,6 +26,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({ listing, onFavoriteTog
     e.stopPropagation();
     if (isTogglingFav) return;
 
+    if (!getAuthToken()) {
+      navigate(`/signin?redirect=${encodeURIComponent(path || `/listing/${listing.id}`)}`);
+      return;
+    }
+
     setIsTogglingFav(true);
     const nextState = !isFavorited;
     setIsFavorited(nextState);
@@ -35,9 +40,12 @@ export const ListingCard: React.FC<ListingCardProps> = ({ listing, onFavoriteTog
       if (onFavoriteToggle) {
         onFavoriteToggle(listing.id, nextState);
       }
-    } catch {
+    } catch (err: any) {
       // Revert if failed
       setIsFavorited(!nextState);
+      if (err?.code === 'UNAUTHENTICATED') {
+        navigate(`/signin?redirect=${encodeURIComponent(path || `/listing/${listing.id}`)}`);
+      }
     } finally {
       setIsTogglingFav(false);
     }

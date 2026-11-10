@@ -11,6 +11,7 @@ interface AuthContextType {
   requestOtp: (phone: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -77,6 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         requestOtp,
         logout,
         checkAuth,
+        refreshUser: checkAuth,
       }}
     >
       {children}

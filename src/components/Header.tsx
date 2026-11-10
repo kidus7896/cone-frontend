@@ -168,8 +168,12 @@ export const Header: React.FC = () => {
                   />
                   <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl z-20">
                     <div className="px-3.5 py-2 border-b border-slate-100">
-                      <div className="text-xs font-bold text-slate-900">{user.name}</div>
-                      <div className="text-[11px] text-slate-500 font-mono">{user.phone}</div>
+                      <div className="text-xs font-bold text-slate-900 truncate">
+                        {user.name || 'Cone User'}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        {user.phone}
+                      </div>
                       {user.role !== 'user' && (
                         <div className="mt-1 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
                           {user.role.replace('_', ' ')}
@@ -182,12 +186,34 @@ export const Header: React.FC = () => {
                         setIsProfileMenuOpen(false);
                         navigate('/my/listings');
                       }}
-                      className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-800 hover:bg-emerald-50 hover:text-emerald-800 flex items-center justify-between"
+                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center justify-between"
                     >
                       <span>My Classifieds</span>
                       <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
                         Manage
                       </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        navigate('/my/favorites');
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <Heart className="h-3.5 w-3.5 text-rose-500" />
+                      <span>Saved Ads (Favorites)</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        navigate('/account');
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <UserIcon className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Account Settings</span>
                     </button>
 
                     <button

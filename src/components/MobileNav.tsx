@@ -9,7 +9,8 @@ export const MobileNav: React.FC = () => {
 
   const isHome = path === '/';
   const isBrowse = path.startsWith('/browse');
-  const isSignIn = path === '/signin';
+  const isFavorites = path === '/my/favorites';
+  const isAccount = path === '/account' || (path === '/signin' && !isAuthenticated);
 
   return (
     <nav
@@ -57,10 +58,18 @@ export const MobileNav: React.FC = () => {
 
       {/* Favorites / Saved */}
       <button
-        onClick={() => navigate('/browse?saved=true')}
-        className="flex flex-col items-center justify-center gap-1 w-16 py-1 text-slate-500 hover:text-emerald-600"
+        onClick={() => {
+          if (isAuthenticated) {
+            navigate('/my/favorites');
+          } else {
+            navigate('/signin?redirect=/my/favorites');
+          }
+        }}
+        className={`flex flex-col items-center justify-center gap-1 w-16 py-1 ${
+          isFavorites ? 'text-emerald-600 font-bold' : 'text-slate-500 hover:text-emerald-600'
+        }`}
       >
-        <Heart className="h-5 w-5" />
+        <Heart className={`h-5 w-5 ${isFavorites ? 'fill-current' : ''}`} />
         <span className="text-[10px]">Saved</span>
       </button>
 
@@ -68,13 +77,13 @@ export const MobileNav: React.FC = () => {
       <button
         onClick={() => {
           if (isAuthenticated) {
-            navigate('/my/listings');
+            navigate('/account');
           } else {
-            navigate('/signin?redirect=/my/listings');
+            navigate('/signin?redirect=/account');
           }
         }}
         className={`flex flex-col items-center justify-center gap-1 w-16 py-1 ${
-          isSignIn ? 'text-emerald-600 font-bold' : 'text-slate-500'
+          isAccount ? 'text-emerald-600 font-bold' : 'text-slate-500 hover:text-emerald-600'
         }`}
       >
         <User className="h-5 w-5" />

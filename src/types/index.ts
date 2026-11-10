@@ -136,6 +136,9 @@ export interface User {
   privacy_accepted: boolean;
   avatar_url?: string;
   created_at: string;
+  email?: string;
+  area_id?: string;
+  area_name?: string;
 }
 
 export interface AuthResponse {

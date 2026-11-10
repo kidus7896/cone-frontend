@@ -661,6 +661,18 @@ class ConeApiClient {
     return this.lookups;
   }
 
+  private mockUser: User = {
+    id: 'usr_me_01',
+    phone: '+251 91 123 4567',
+    name: 'Addis Ababa Resident',
+    role: 'user',
+    privacy_accepted: true,
+    email: 'resident@addis.et',
+    area_id: 'Bole',
+    area_name: 'Bole',
+    created_at: '2024-02-01T00:00:00Z',
+  };
+
   constructor() {
     this.baseUrl = BASE_URL;
     this.useMock = USE_MOCK;
@@ -842,19 +854,72 @@ class ConeApiClient {
     if (this.useMock) {
       await new Promise((res) => setTimeout(res, 150));
       return {
-        user: {
-          id: 'usr_me_01',
-          phone: '+251911234567',
-          name: 'Addis Ababa Resident',
-          role: 'user',
-          privacy_accepted: true,
-          created_at: '2024-02-01T00:00:00Z',
-        },
+        user: { ...this.mockUser },
       };
     }
 
+    const lookups = await this.getLookups();
     const me = await this.request<ApiUser>('/me');
-    return { user: mapUser(me) };
+    return { user: mapUser(me, lookups) };
+  }
+
+  /**
+   * Update current user profile (PATCH /me)
+   */
+  async updateMe(payload: { name?: string; email?: string | null; areaId?: string | null }): Promise<User> {
+    const token = getAuthToken();
+    if (!token) {
+      throw new ConeApiError('UNAUTHENTICATED', 'No active session found.');
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      this.mockUser = {
+        ...this.mockUser,
+        name: payload.name !== undefined ? payload.name.trim() : this.mockUser.name,
+        email: payload.email === null ? undefined : payload.email !== undefined ? payload.email.trim() : this.mockUser.email,
+        area_id: payload.areaId === null ? undefined : payload.areaId !== undefined ? payload.areaId : this.mockUser.area_id,
+        area_name: payload.areaId === null ? undefined : payload.areaId !== undefined ? payload.areaId : this.mockUser.area_name,
+      };
+      return { ...this.mockUser };
+    }
+
+    const lookups = await this.getLookups();
+    const body: Record<string, any> = {};
+    if (payload.name !== undefined) body.name = payload.name.trim();
+    if (payload.email !== undefined) body.email = payload.email === null ? null : payload.email.trim();
+    if (payload.areaId !== undefined) {
+      if (payload.areaId === null) {
+        body.areaId = null;
+      } else {
+        body.areaId = lookups.areaNameToId.get(payload.areaId.toLowerCase()) ?? payload.areaId;
+      }
+    }
+
+    const res = await this.request<ApiUser>('/me', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    return mapUser(res, lookups);
+  }
+
+  /**
+   * Request account deletion (POST /me/deletion-request)
+   */
+  async requestAccountDeletion(): Promise<void> {
+    const token = getAuthToken();
+    if (!token) {
+      throw new ConeApiError('UNAUTHENTICATED', 'No active session found.');
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 250));
+      return;
+    }
+
+    await this.request<void>('/me/deletion-request', {
+      method: 'POST',
+    });
   }
 
   /**
@@ -1059,14 +1124,24 @@ class ConeApiClient {
    * Toggle favorite state for a listing
    */
   async toggleFavorite(listingId: string): Promise<{ favorited: boolean }> {
+    const token = getAuthToken();
+    if (!token) {
+      throw new ConeApiError('UNAUTHENTICATED', 'Sign in to save favorite ads');
+    }
+
     const favorites = getStoredFavorites();
     const isFav = favorites.has(listingId);
 
     if (!this.useMock) {
-      // Server first: if the user is not signed in this throws and nothing is saved locally.
-      await this.request(`/listings/${listingId}/favorite`, { method: isFav ? 'DELETE' : 'PUT' });
+      // In real mode: call PUT /listings/{id}/favorite to add, DELETE to remove (both return 204)
+      await this.request<void>(`/listings/${listingId}/favorite`, {
+        method: isFav ? 'DELETE' : 'PUT',
+      });
+    } else {
+      await new Promise((res) => setTimeout(res, 150));
     }
 
+    // Only update local storage after the server call succeeds
     if (isFav) {
       favorites.delete(listingId);
     } else {
@@ -1074,10 +1149,57 @@ class ConeApiClient {
     }
     saveStoredFavorites(favorites);
 
-    if (this.useMock) {
-      await new Promise((res) => setTimeout(res, 150));
-    }
     return { favorited: !isFav };
+  }
+
+  /**
+   * Get user's favorited listings (GET /me/favorites)
+   */
+  async getMyFavorites(page = 1, limit = 20): Promise<{ listings: Listing[]; total: number; page: number; limit: number; total_pages: number }> {
+    const token = getAuthToken();
+    if (!token) {
+      throw new ConeApiError('UNAUTHENTICATED', 'No active session found.');
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      const favSet = getStoredFavorites();
+      const favListings = this.mockListings
+        .filter((l) => favSet.has(l.id))
+        .map((l) => ({ ...l, is_favorited: true }));
+
+      const total = favListings.length;
+      const start = (page - 1) * limit;
+      const paged = favListings.slice(start, start + limit);
+
+      return {
+        listings: paged,
+        total,
+        page,
+        limit,
+        total_pages: Math.max(1, Math.ceil(total / limit)),
+      };
+    }
+
+    const lookups = await this.getLookups();
+    const res = await this.request<{
+      items: ApiListingSummary[];
+      page: number;
+      pageSize: number;
+      total: number;
+    }>(`/me/favorites?page=${page}&pageSize=${limit}`);
+
+    return {
+      listings: (res.items || []).map((i) => {
+        const item = mapListingSummary(i, lookups);
+        item.is_favorited = true;
+        return item;
+      }),
+      total: res.total,
+      page: res.page,
+      limit: res.pageSize,
+      total_pages: Math.max(1, Math.ceil(res.total / (res.pageSize || limit))),
+    };
   }
 
   /**
@@ -1549,6 +1671,21 @@ class ConeApiClient {
       body: JSON.stringify({ action: toApiStatusAction(statusOrAction) }),
     });
     return mapListing(res, lookups);
+  }
+
+  /**
+   * Delete a listing (DELETE /listings/{id})
+   */
+  async deleteListing(id: string): Promise<void> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      this.mockListings = this.mockListings.filter((l) => l.id !== id);
+      return;
+    }
+
+    await this.request<void>(`/listings/${id}`, {
+      method: 'DELETE',
+    });
   }
 }
 

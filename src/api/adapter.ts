@@ -65,6 +65,9 @@ export interface ApiUser {
   phone: string;
   role: User['role'];
   createdAt: string;
+  email?: string | null;
+  areaId?: string | null;
+  areaName?: string | null;
 }
 
 // ---------- Lookups built from /categories and /areas ----------
@@ -135,7 +138,8 @@ export function resolveCategoryId(key: string | undefined, lookups: Pick<Lookups
 
 // ---------- Mappers ----------
 
-export function mapUser(u: ApiUser): User {
+export function mapUser(u: ApiUser, lookups?: Lookups): User {
+  const areaName = u.areaName ?? (u.areaId && lookups?.areaById ? lookups.areaById.get(u.areaId) : undefined);
   return {
     id: u.id,
     phone: u.phone,
@@ -143,6 +147,9 @@ export function mapUser(u: ApiUser): User {
     role: u.role,
     privacy_accepted: true,
     created_at: u.createdAt,
+    email: u.email ?? undefined,
+    area_id: u.areaId ?? undefined,
+    area_name: areaName ?? undefined,
   };
 }
 
