@@ -36,7 +36,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({ listing, onFavoriteTog
     setIsFavorited(nextState);
 
     try {
-      await apiClient.toggleFavorite(listing.id);
+      await apiClient.toggleFavorite(listing.id, nextState);
       if (onFavoriteToggle) {
         onFavoriteToggle(listing.id, nextState);
       }

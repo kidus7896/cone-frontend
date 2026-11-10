@@ -142,7 +142,7 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ id }) => {
     setIsFavorited(nextState);
 
     try {
-      await apiClient.toggleFavorite(listing.id);
+      await apiClient.toggleFavorite(listing.id, nextState);
     } catch (err: any) {
       setIsFavorited(!nextState);
       if (err?.code === 'UNAUTHENTICATED') {

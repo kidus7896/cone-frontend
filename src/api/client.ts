@@ -932,6 +932,12 @@ class ConeApiClient {
       }
     } finally {
       clearAuthToken();
+      try {
+        localStorage.removeItem(FAVORITES_KEY);
+        localStorage.removeItem(REVEALED_PHONES_KEY);
+      } catch {
+        /* storage unavailable */
+      }
     }
   }
 
@@ -1123,14 +1129,15 @@ class ConeApiClient {
   /**
    * Toggle favorite state for a listing
    */
-  async toggleFavorite(listingId: string): Promise<{ favorited: boolean }> {
+  async toggleFavorite(listingId: string, desired?: boolean): Promise<{ favorited: boolean }> {
     const token = getAuthToken();
     if (!token) {
       throw new ConeApiError('UNAUTHENTICATED', 'Sign in to save favorite ads');
     }
 
     const favorites = getStoredFavorites();
-    const isFav = favorites.has(listingId);
+    // The screen knows what the user just clicked (server state), so prefer that over local storage.
+    const isFav = desired === undefined ? favorites.has(listingId) : !desired;
 
     if (!this.useMock) {
       // In real mode: call PUT /listings/{id}/favorite to add, DELETE to remove (both return 204)
