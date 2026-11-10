@@ -12,5 +12,11 @@ const envMock = (import.meta.env.VITE_USE_MOCK as string | undefined)?.trim();
 // An address that points at the developer's own machine cannot work from the hosted preview.
 const envUrlUsable = !!envUrl && !/localhost|127\.0\.0\.1/.test(envUrl);
 
-export const API_BASE_URL = (envUrlUsable ? envUrl! : TEST_BACKEND).replace(/\/+$/, '');
+// The backend only answers under /api/v1, so add it when a setting leaves it out.
+function withApiPrefix(url: string): string {
+  const trimmed = url.replace(/\/+$/, '');
+  return /\/api\/v1$/.test(trimmed) ? trimmed : `${trimmed}/api/v1`;
+}
+
+export const API_BASE_URL = withApiPrefix(envUrlUsable ? envUrl! : TEST_BACKEND);
 export const USE_MOCK = envMock === 'true' ? true : envMock === 'false' ? false : MOCK_BY_DEFAULT;
