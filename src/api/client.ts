@@ -717,9 +717,11 @@ class ConeApiClient {
             message: response.statusText || 'An unexpected server error occurred',
           },
         };
+        // A 404 usually means a wrong address, so show which address was called.
+        const where = response.status === 404 ? ` (called ${options.method || 'GET'} ${url})` : '';
         throw new ConeApiError(
           errorPayload.error.code,
-          errorPayload.error.message,
+          `${errorPayload.error.message}${where}`,
           errorPayload.error.fields
         );
       }
