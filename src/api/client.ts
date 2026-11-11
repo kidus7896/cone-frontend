@@ -25,6 +25,7 @@ import {
   mapUser,
   mapFieldErrors,
   resolveLeafCategoryId,
+  coerceAttributes,
   toApiStatusAction,
   toApiStatusFilter,
   toApiCondition,
@@ -1426,7 +1427,11 @@ class ConeApiClient {
     if (payload.attributes !== undefined) {
       // "subcategory" is an app-side helper; the backend stores it as the leaf categoryId.
       const { subcategory: _sub, ...rest } = payload.attributes as Record<string, any>;
-      body.attributes = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined && v !== ''));
+      body.attributes = coerceAttributes(
+        Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined && v !== '')),
+        body.categoryId,
+        this.categoryTree
+      );
     }
     if (payload.contact) {
       body.contact = {

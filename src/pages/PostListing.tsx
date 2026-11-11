@@ -156,6 +156,10 @@ export const PostListing: React.FC = () => {
 
   // When parent category changes, set default subcategory if available
   const activeCategoryObj = categories.find((c) => c.id === selectedParentCategory);
+  // The backend defines extra fields on the subcategory (for example Cars: make, model, year).
+  const activeFields =
+    (selectedSubcategory && activeCategoryObj?.subcategoryFields?.[selectedSubcategory]) ||
+    activeCategoryObj?.fields;
   useEffect(() => {
     if (activeCategoryObj && activeCategoryObj.subcategories.length > 0 && !selectedSubcategory) {
       setSelectedSubcategory(activeCategoryObj.subcategories[0]);
@@ -192,8 +196,8 @@ export const PostListing: React.FC = () => {
     }
 
     // Required extra fields
-    if (activeCategoryObj?.fields) {
-      activeCategoryObj.fields.forEach((f) => {
+    if (activeFields) {
+      activeFields.forEach((f) => {
         if (f.required && (attributes[f.key] === undefined || attributes[f.key] === '')) {
           errs[f.key] = `${f.label} is required`;
         }
@@ -230,6 +234,8 @@ export const PostListing: React.FC = () => {
 
         // Patch remaining fields
         await apiClient.updateListing(draft.id, {
+          categoryId: leafCatId, // lets the client pick the chosen subcategory
+          areaId: selectedArea,
           price: Math.round(Number(price)),
           is_negotiable: isNegotiable,
           condition,
@@ -627,7 +633,10 @@ export const PostListing: React.FC = () => {
                   <select
                     value={selectedSubcategory}
                     disabled={!activeCategoryObj || activeCategoryObj.subcategories.length === 0}
-                    onChange={(e) => setSelectedSubcategory(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedSubcategory(e.target.value);
+                      setAttributes({}); // fields differ per subcategory
+                    }}
                     className="w-full rounded-xl border border-slate-300 bg-white py-2.5 px-3 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:opacity-60"
                   >
                     {activeCategoryObj && activeCategoryObj.subcategories.length > 0 ? (
@@ -744,13 +753,13 @@ export const PostListing: React.FC = () => {
               </div>
 
               {/* Category Extra Dynamic Fields */}
-              {activeCategoryObj?.fields && activeCategoryObj.fields.length > 0 && (
+              {activeFields && activeFields.length > 0 && (
                 <div className="rounded-xl bg-slate-50 p-4 border border-slate-200/80 space-y-3">
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    {activeCategoryObj.name} Specifications
+                    {selectedSubcategory || activeCategoryObj.name} details
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {activeCategoryObj.fields.map((f) => (
+                    {activeFields.map((f) => (
                       <div key={f.key}>
                         <label className="text-xs font-medium text-slate-700 block mb-1">
                           {f.label} {f.required && <span className="text-rose-500">*</span>}

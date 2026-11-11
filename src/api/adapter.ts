@@ -153,6 +153,14 @@ export function mapUser(u: ApiUser, lookups?: Lookups): User {
   };
 }
 
+const mapField = (f: NonNullable<ApiCategory['fields']>[number]) => ({
+  key: f.key,
+  label: f.label,
+  type: f.type,
+  options: f.options,
+  required: f.required,
+});
+
 export function mapCategories(items: ApiCategory[]): Category[] {
   return items.map((c) => ({
     id: c.id,
@@ -162,7 +170,10 @@ export function mapCategories(items: ApiCategory[]): Category[] {
     description: '',
     itemCount: 0,
     subcategories: (c.children ?? []).map((child) => child.name),
-    fields: c.fields?.map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options })),
+    fields: c.fields?.map(mapField),
+    subcategoryFields: Object.fromEntries(
+      (c.children ?? []).filter((ch) => ch.fields?.length).map((ch) => [ch.name, ch.fields!.map(mapField)])
+    ),
   }));
 }
 
@@ -305,7 +316,8 @@ export function mapFieldErrors(fields?: Record<string, string>): Record<string, 
   if (!fields) return fields;
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(fields)) {
-    out[k === 'priceEtb' ? 'price' : k === 'photos' ? 'images' : k] = v;
+    const key = k.startsWith('attributes.') ? k.slice('attributes.'.length) : k;
+    out[key === 'priceEtb' ? 'price' : key === 'photos' ? 'images' : key] = v;
   }
   return out;
 }
@@ -321,4 +333,22 @@ export function toApiStatusAction(a: string): string {
 export function toApiStatusFilter(s?: string): string | undefined {
   if (!s || s === 'all') return undefined;
   return s === 'waiting_for_review' ? 'pending_review' : s;
+}
+
+// Form inputs give strings; the backend wants numbers for number fields.
+export function coerceAttributes(
+  attrs: Record<string, unknown>,
+  leafCategoryId: string | undefined,
+  tree: ApiCategory[]
+): Record<string, unknown> {
+  const all: ApiCategory[] = tree.flatMap((c) => [c, ...(c.children ?? [])]);
+  const defs = all.find((c) => c.id === leafCategoryId)?.fields ?? [];
+  const out: Record<string, unknown> = { ...attrs };
+  for (const f of defs) {
+    const v = out[f.key];
+    if (f.type === 'number' && typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) {
+      out[f.key] = Number(v);
+    }
+  }
+  return out;
 }

@@ -28,6 +28,8 @@ export interface Category {
   itemCount: number;
   subcategories: string[];
   fields?: CategoryFieldDef[];
+  /** Extra fields per subcategory name (the backend defines fields on the leaf category). */
+  subcategoryFields?: Record<string, CategoryFieldDef[]>;
 }
 
 export interface Seller {
