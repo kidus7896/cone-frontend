@@ -15,6 +15,7 @@ import { PostListing } from './pages/PostListing';
 import { MyListings } from './pages/MyListings';
 import { Favorites } from './pages/Favorites';
 import { Account } from './pages/Account';
+import { Admin } from './pages/Admin';
 
 function AppContent() {
   const { path } = useRouter();
@@ -29,6 +30,8 @@ function AppContent() {
     pageContent = <ListingDetail id={listingMatch[1]} />;
   } else if (sellerMatch) {
     pageContent = <SellerProfile id={sellerMatch[1]} />;
+  } else if (path === '/admin' || path.startsWith('/admin/')) {
+    pageContent = <Admin />;
   } else if (path === '/post') {
     pageContent = <PostListing />;
   } else if (path === '/my/listings') {

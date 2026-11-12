@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, Phone, Mail, MapPin, ShieldAlert, LogOut, CheckCircle2, AlertTriangle, Save, Lock } from 'lucide-react';
+import { User, Phone, Mail, MapPin, ShieldAlert, LogOut, CheckCircle2, Save, Lock, ShieldCheck } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useRouter } from '../context/RouterContext';
 import { useAuth } from '../context/AuthContext';
@@ -164,13 +164,24 @@ export const Account: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={handleSignOut}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700 transition-colors self-start sm:self-auto shadow-2xs"
-          >
-            <LogOut className="h-3.5 w-3.5 text-slate-500" />
-            <span>{t.account.signOut}</span>
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {(user?.role === 'moderator' || user?.role === 'super_admin') && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 px-4 py-2 text-xs font-bold text-white transition-colors shadow-2xs"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                <span>{t.nav.admin}</span>
+              </button>
+            )}
+            <button
+              onClick={handleSignOut}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700 transition-colors shadow-2xs"
+            >
+              <LogOut className="h-3.5 w-3.5 text-slate-500" />
+              <span>{t.account.signOut}</span>
+            </button>
+          </div>
         </div>
       </div>
 

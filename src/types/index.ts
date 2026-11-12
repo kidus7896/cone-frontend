@@ -170,3 +170,91 @@ export interface ReportResponse {
   success: boolean;
   message: string;
 }
+
+export type VerifyOtpResponse =
+  | (AuthResponse & { mfaRequired?: false })
+  | { mfaRequired: true; mfaToken: string };
+
+export interface AdminDashboard {
+  pendingListings: number;
+  activeListings: number;
+  openReports: number;
+  totalUsers: number;
+  suspendedUsers?: number;
+  resolvedReports?: number;
+  extraCounts?: Array<{ key: string; label: string; value: number }>;
+}
+
+export interface AdminListingItem extends Listing {
+  submitted_at: string;
+}
+
+export interface AdminReport {
+  id: string;
+  listingId: string;
+  listingTitle: string;
+  listingStatus?: string;
+  reporterId?: string;
+  reporterName?: string;
+  reporterPhone?: string;
+  reason: string;
+  note?: string;
+  status: 'open' | 'resolved' | 'dismissed' | string;
+  resolutionAction?: string;
+  resolutionNote?: string;
+  resolvedAt?: string;
+  createdAt: string;
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  role: User['role'];
+  status: 'active' | 'suspended';
+  statusReason?: string;
+  createdAt: string;
+  listingsCount?: number;
+}
+
+export interface AdminUserRoleUpdateResult {
+  user: AdminUser;
+  mfaSetupUri?: string | null;
+}
+
+export interface AdminCategory {
+  id: string;
+  parentId: string | null;
+  name: string;
+  slug: string;
+  sortOrder?: number;
+  isActive?: boolean;
+  fields: CategoryFieldDef[];
+  children: AdminCategory[];
+}
+
+export interface AdminArea {
+  id: string;
+  parentId: string | null;
+  name: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export type AdminSettings = Record<string, string | number | boolean | null>;
+
+export interface AuditLogEntry {
+  id: string;
+  createdAt: string;
+  actorId: string;
+  actorName?: string;
+  actorPhone?: string;
+  actorRole?: string;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  reason?: string;
+  details?: Record<string, any>;
+}
+

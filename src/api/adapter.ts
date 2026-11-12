@@ -1,7 +1,22 @@
 // Translates between the Cone backend (openapi.yaml: camelCase, priceEtb, categoryId...)
 // and the shapes the pages already use (snake_case, price, category_id...).
 // Pure functions only, so they are easy to test. Used by client.ts when VITE_USE_MOCK=false.
-import type { Category, Condition, Listing, ListingsQuery, ReportPayload, Seller, User } from '../types';
+import type {
+  AdminArea,
+  AdminCategory,
+  AdminDashboard,
+  AdminListingItem,
+  AdminReport,
+  AdminUser,
+  AuditLogEntry,
+  Category,
+  Condition,
+  Listing,
+  ListingsQuery,
+  ReportPayload,
+  Seller,
+  User,
+} from '../types';
 
 // ---------- Raw backend shapes (only the fields we use) ----------
 
@@ -352,3 +367,274 @@ export function coerceAttributes(
   }
   return out;
 }
+
+// ---------- Admin raw shapes & mappers ----------
+
+export interface ApiAdminListing extends Partial<ApiListing> {
+  id: string;
+  title: string;
+  priceEtb: number;
+  categoryId: string;
+  areaId?: string;
+  areaName?: string;
+  coverThumbUrl?: string | null;
+  status: Listing['status'];
+  submittedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  seller?: ApiSeller & { phone?: string };
+  sellerName?: string | null;
+}
+
+export interface ApiAdminReport {
+  id: string;
+  listingId: string;
+  listingTitle?: string;
+  listing?: { id: string; title: string; status?: string };
+  reporterId?: string;
+  reporter?: { id: string; name?: string | null; phone?: string };
+  reporterName?: string | null;
+  reporterPhone?: string;
+  reason: string;
+  note?: string | null;
+  details?: string | null;
+  status: string;
+  resolutionAction?: string | null;
+  resolution?: string | null;
+  resolutionNote?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+}
+
+export interface ApiAdminUser {
+  id: string;
+  name: string | null;
+  phone: string;
+  email?: string | null;
+  role: User['role'];
+  status?: 'active' | 'suspended';
+  suspended?: boolean;
+  statusReason?: string | null;
+  suspendReason?: string | null;
+  createdAt: string;
+  listingsCount?: number;
+  activeListings?: number;
+}
+
+export interface ApiAdminCategory extends ApiCategory {
+  sortOrder?: number;
+  isActive?: boolean;
+  active?: boolean;
+  children?: ApiAdminCategory[];
+}
+
+export interface ApiAdminArea extends ApiArea {
+  isActive?: boolean;
+  active?: boolean;
+  sortOrder?: number;
+}
+
+export interface ApiAuditLogEntry {
+  id: string;
+  createdAt: string;
+  actorId: string;
+  actorName?: string | null;
+  actorPhone?: string | null;
+  actorRole?: string | null;
+  actor?: { id: string; name?: string | null; phone?: string | null; role?: string | null };
+  action: string;
+  targetType?: string | null;
+  entityType?: string | null;
+  targetId?: string | null;
+  entityId?: string | null;
+  reason?: string | null;
+  details?: Record<string, any> | null;
+}
+
+function humanizeMetricKey(key: string): string {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
+export function mapAdminDashboard(raw: Record<string, any>): AdminDashboard {
+  const knownKeys = new Set([
+    'pendingListings',
+    'pendingReviewListings',
+    'pendingCount',
+    'activeListings',
+    'openReports',
+    'totalUsers',
+    'suspendedUsers',
+    'resolvedReports',
+  ]);
+
+  const pendingListings = Number(
+    raw.pendingListings ?? raw.pendingReviewListings ?? raw.pendingCount ?? 0
+  );
+  const activeListings = Number(raw.activeListings ?? 0);
+  const openReports = Number(raw.openReports ?? raw.pendingReports ?? 0);
+  const totalUsers = Number(raw.totalUsers ?? raw.usersCount ?? 0);
+  const suspendedUsers =
+    raw.suspendedUsers !== undefined ? Number(raw.suspendedUsers) : undefined;
+  const resolvedReports =
+    raw.resolvedReports !== undefined ? Number(raw.resolvedReports) : undefined;
+
+  const extraCounts: Array<{ key: string; label: string; value: number }> = [];
+  for (const [key, val] of Object.entries(raw)) {
+    if (!knownKeys.has(key) && typeof val === 'number' && Number.isFinite(val)) {
+      extraCounts.push({ key, label: humanizeMetricKey(key), value: val });
+    }
+  }
+
+  return {
+    pendingListings,
+    activeListings,
+    openReports,
+    totalUsers,
+    suspendedUsers,
+    resolvedReports,
+    extraCounts,
+  };
+}
+
+export function mapAdminListing(item: ApiAdminListing, lookups: Lookups): AdminListingItem {
+  const cat = lookups.categoryById.get(item.categoryId);
+  const sellerObj = item.seller
+    ? mapSeller(item.seller)
+    : {
+        id: '',
+        name: item.sellerName?.trim() || 'Cone seller',
+        phone_masked: maskedPhone(),
+        joined_at: '',
+        verified: false,
+      };
+  if (item.seller?.phone) {
+    sellerObj.phone_revealed = item.seller.phone;
+  }
+  if (item.contact?.telegram) {
+    sellerObj.telegram_username = item.contact.telegram.replace(/^https?:\/\/t\.me\//, '').replace(/^@/, '');
+  }
+  if (item.contact?.email) {
+    sellerObj.email = item.contact.email;
+  }
+
+  const images =
+    item.images && item.images.length > 0
+      ? [...item.images].sort((a, b) => a.order - b.order).map((i) => i.url)
+      : item.coverThumbUrl
+      ? [item.coverThumbUrl]
+      : [];
+
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description ?? '',
+    price: item.priceEtb ?? 0,
+    currency: 'ETB',
+    is_negotiable: Boolean(item.negotiable),
+    category_id: cat?.parentId ?? item.categoryId,
+    category_name: cat?.parentName ?? cat?.name ?? '',
+    subcategory: cat?.parentName ? cat.name : undefined,
+    area: item.areaName ?? (item.areaId ? lookups.areaById.get(item.areaId) ?? '' : ''),
+    condition: toFrontendCondition(item.condition ?? 'used'),
+    images,
+    images_meta: item.images
+      ? [...item.images].sort((a, b) => a.order - b.order).map((i, idx) => ({ id: i.id, url: i.url, is_cover: idx === 0 }))
+      : undefined,
+    attributes: item.attributes ?? {},
+    status: item.status,
+    rejection_reason: item.rejectReason ?? undefined,
+    show_phone: item.contact?.showPhone,
+    contact: item.contact
+      ? {
+          show_phone: item.contact.showPhone,
+          telegram_username: sellerObj.telegram_username,
+          email: item.contact.email ?? undefined,
+        }
+      : undefined,
+    views_count: 0,
+    favorites_count: 0,
+    created_at: item.createdAt,
+    updated_at: item.updatedAt ?? item.createdAt,
+    submitted_at: item.submittedAt ?? item.createdAt,
+    seller: sellerObj,
+  };
+}
+
+export function mapAdminReport(r: ApiAdminReport): AdminReport {
+  return {
+    id: r.id,
+    listingId: r.listingId || r.listing?.id || '',
+    listingTitle: r.listingTitle ?? r.listing?.title ?? 'Reported Listing',
+    listingStatus: r.listing?.status,
+    reporterId: r.reporterId ?? r.reporter?.id,
+    reporterName: r.reporterName ?? r.reporter?.name ?? undefined,
+    reporterPhone: r.reporterPhone ?? r.reporter?.phone ?? undefined,
+    reason: r.reason,
+    note: r.note ?? r.details ?? undefined,
+    status: r.status,
+    resolutionAction: r.resolutionAction ?? r.resolution ?? undefined,
+    resolutionNote: r.resolutionNote ?? undefined,
+    resolvedAt: r.resolvedAt ?? undefined,
+    createdAt: r.createdAt,
+  };
+}
+
+export function mapAdminUser(u: ApiAdminUser): AdminUser {
+  const status: 'active' | 'suspended' =
+    u.status === 'suspended' || u.suspended ? 'suspended' : 'active';
+  return {
+    id: u.id,
+    name: u.name ?? '',
+    phone: u.phone,
+    email: u.email ?? undefined,
+    role: u.role,
+    status,
+    statusReason: u.statusReason ?? u.suspendReason ?? undefined,
+    createdAt: u.createdAt,
+    listingsCount: u.listingsCount ?? u.activeListings,
+  };
+}
+
+export function mapAdminCategory(c: ApiAdminCategory): AdminCategory {
+  return {
+    id: c.id,
+    parentId: c.parentId ?? null,
+    name: c.name,
+    slug: c.slug,
+    sortOrder: c.sortOrder,
+    isActive: c.isActive ?? c.active ?? true,
+    fields: (c.fields ?? []).map(mapField),
+    children: (c.children ?? []).map(mapAdminCategory),
+  };
+}
+
+export function mapAdminArea(a: ApiAdminArea): AdminArea {
+  return {
+    id: a.id,
+    parentId: a.parentId ?? null,
+    name: a.name,
+    isActive: a.isActive ?? a.active ?? true,
+    sortOrder: a.sortOrder,
+  };
+}
+
+export function mapAuditLogEntry(e: ApiAuditLogEntry): AuditLogEntry {
+  return {
+    id: e.id,
+    createdAt: e.createdAt,
+    actorId: e.actorId || e.actor?.id || '',
+    actorName: e.actorName ?? e.actor?.name ?? undefined,
+    actorPhone: e.actorPhone ?? e.actor?.phone ?? undefined,
+    actorRole: e.actorRole ?? e.actor?.role ?? undefined,
+    action: e.action,
+    targetType: e.targetType ?? e.entityType ?? undefined,
+    targetId: e.targetId ?? e.entityId ?? undefined,
+    reason: e.reason ?? undefined,
+    details: e.details ?? undefined,
+  };
+}
+

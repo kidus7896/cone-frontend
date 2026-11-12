@@ -12,6 +12,17 @@ import {
   CreateDraftPayload,
   UpdateListingPayload,
   ListingStatus,
+  VerifyOtpResponse,
+  AdminDashboard,
+  AdminListingItem,
+  AdminReport,
+  AdminUser,
+  AdminUserRoleUpdateResult,
+  AdminCategory,
+  AdminArea,
+  AdminSettings,
+  AuditLogEntry,
+  CategoryFieldDef,
 } from '../types';
 import {
   buildAreaLookup,
@@ -30,12 +41,25 @@ import {
   toApiStatusFilter,
   toApiCondition,
   resolveCategoryId,
+  mapAdminDashboard,
+  mapAdminListing,
+  mapAdminReport,
+  mapAdminUser,
+  mapAdminCategory,
+  mapAdminArea,
+  mapAuditLogEntry,
   type ApiArea,
   type ApiCategory,
   type ApiListing,
   type ApiListingSummary,
   type ApiSeller,
   type ApiUser,
+  type ApiAdminListing,
+  type ApiAdminReport,
+  type ApiAdminUser,
+  type ApiAdminCategory,
+  type ApiAdminArea,
+  type ApiAuditLogEntry,
   type Lookups,
 } from './adapter';
 
@@ -673,10 +697,247 @@ class ConeApiClient {
     created_at: '2024-02-01T00:00:00Z',
   };
 
+  private mockAdminReports: AdminReport[] = [
+    {
+      id: 'rep_101',
+      listingId: 'cone-101',
+      listingTitle: 'Toyota Vitz 2018 Automatic - Very Clean, Low Mileage',
+      listingStatus: 'active',
+      reporterId: 'usr_rep_01',
+      reporterName: 'Dawit Bekele',
+      reporterPhone: '+251 91 555 2233',
+      reason: 'wrong_category',
+      note: 'Listing mentions commercial taxi license but posted under personal cars.',
+      status: 'open',
+      createdAt: new Date(Date.now() - 1000 * 60 * 95).toISOString(),
+    },
+    {
+      id: 'rep_102',
+      listingId: 'cone-102',
+      listingTitle: 'Modern 3-Bedroom Furnished Apartment in Kazanchis',
+      listingStatus: 'active',
+      reporterId: 'usr_rep_02',
+      reporterName: 'Tigist Haile',
+      reporterPhone: '+251 92 444 1199',
+      reason: 'scam',
+      note: 'Seller asked for a deposit before showing the apartment.',
+      status: 'open',
+      createdAt: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
+    },
+    {
+      id: 'rep_100',
+      listingId: 'cone-103',
+      listingTitle: 'iPhone 14 Pro Max 256GB Space Black',
+      listingStatus: 'active',
+      reporterId: 'usr_rep_03',
+      reporterName: 'Mekdes Alemu',
+      reason: 'duplicate',
+      note: 'Checked against seller history - unique serial number.',
+      status: 'resolved',
+      resolutionAction: 'dismiss',
+      resolutionNote: 'Verified unique item, not a duplicate.',
+      resolvedAt: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+    },
+  ];
+
+  private mockAdminUsers: AdminUser[] = [
+    {
+      id: 'usr_me_01',
+      name: 'Addis Ababa Resident',
+      phone: '+251 91 123 4567',
+      email: 'resident@addis.et',
+      role: 'user',
+      status: 'active',
+      createdAt: '2024-02-01T00:00:00Z',
+      listingsCount: 3,
+    },
+    {
+      id: 'sel_01',
+      name: 'Yonas Tadesse',
+      phone: '+251 91 123 4534',
+      email: 'yonas.t@example.com',
+      role: 'user',
+      status: 'active',
+      createdAt: '2023-04-12T00:00:00Z',
+      listingsCount: 4,
+    },
+    {
+      id: 'usr_mod_01',
+      name: 'Abebe Girma',
+      phone: '+251 91 123 8888',
+      email: 'abebe.mod@cone.et',
+      role: 'moderator',
+      status: 'active',
+      createdAt: '2023-01-15T00:00:00Z',
+      listingsCount: 0,
+    },
+    {
+      id: 'usr_admin_01',
+      name: 'Sara Tesfaye',
+      phone: '+251 91 123 9999',
+      email: 'sara.admin@cone.et',
+      role: 'super_admin',
+      status: 'active',
+      createdAt: '2022-11-01T00:00:00Z',
+      listingsCount: 0,
+    },
+    {
+      id: 'usr_susp_01',
+      name: 'Biniyam Kebede',
+      phone: '+251 93 888 7766',
+      role: 'user',
+      status: 'suspended',
+      statusReason: 'Multiple scam reports confirmed by moderation.',
+      createdAt: '2024-06-10T00:00:00Z',
+      listingsCount: 1,
+    },
+  ];
+
+  private mockAdminCategories: AdminCategory[] = MOCK_CATEGORIES.map((c, idx) => ({
+    id: c.id,
+    parentId: null,
+    name: c.name,
+    slug: c.slug,
+    sortOrder: idx + 1,
+    isActive: true,
+    fields: c.fields ? [...c.fields] : [],
+    children: c.subcategories.map((subName, sIdx) => ({
+      id: `${c.id}_sub_${sIdx + 1}`,
+      parentId: c.id,
+      name: subName,
+      slug: subName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      sortOrder: sIdx + 1,
+      isActive: true,
+      fields: [],
+      children: [],
+    })),
+  }));
+
+  private mockAdminAreas: AdminArea[] = ADDIS_ABABA_AREAS.map((name, idx) => ({
+    id: `area_${idx + 1}`,
+    parentId: null,
+    name,
+    isActive: true,
+    sortOrder: idx + 1,
+  }));
+
+  private mockAdminSettings: AdminSettings = {
+    listingTtlDays: 30,
+    maxImagesPerListing: 8,
+    maxActiveListingsPerUser: 15,
+    requireModeration: true,
+    maintenanceMode: false,
+    supportPhone: '+251 11 555 0100',
+  };
+
+  private mockAuditLogs: AuditLogEntry[] = [
+    {
+      id: 'aud_103',
+      createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+      actorId: 'usr_admin_01',
+      actorName: 'Sara Tesfaye',
+      actorPhone: '+251 91 123 9999',
+      actorRole: 'super_admin',
+      action: 'settings.update',
+      targetType: 'settings',
+      targetId: 'global',
+      details: { listingTtlDays: 30 },
+    },
+    {
+      id: 'aud_102',
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+      actorId: 'usr_mod_01',
+      actorName: 'Abebe Girma',
+      actorPhone: '+251 91 123 8888',
+      actorRole: 'moderator',
+      action: 'user.suspend',
+      targetType: 'user',
+      targetId: 'usr_susp_01',
+      reason: 'Multiple scam reports confirmed by moderation.',
+    },
+    {
+      id: 'aud_101',
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
+      actorId: 'usr_mod_01',
+      actorName: 'Abebe Girma',
+      actorPhone: '+251 91 123 8888',
+      actorRole: 'moderator',
+      action: 'report.resolve',
+      targetType: 'report',
+      targetId: 'rep_100',
+      reason: 'Verified unique item, not a duplicate.',
+    },
+  ];
+
   constructor() {
     this.baseUrl = BASE_URL;
     this.useMock = USE_MOCK;
-    this.mockListings = [...INITIAL_MOCK_LISTINGS];
+    this.mockListings = [
+      ...INITIAL_MOCK_LISTINGS,
+      {
+        id: 'cone-pending-201',
+        title: '2021 Suzuki Swift DZire Automatic - Clean Plate',
+        slug: '2021-suzuki-swift-dzire-bole',
+        description: 'Low mileage 2021 Suzuki Swift DZire imported 6 months ago. Original body paint, clean interior, Bluetooth audio, reverse camera. Viewing near Bole Atlas.',
+        price: 2950000,
+        currency: 'ETB',
+        is_negotiable: true,
+        category_id: 'vehicles',
+        category_name: 'Vehicles',
+        subcategory: 'Sedan',
+        area: 'Bole',
+        condition: 'used_good',
+        images: [
+          'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80',
+        ],
+        attributes: { make: 'Suzuki', model: 'Swift DZire', year: 2021, transmission: 'Automatic' },
+        status: 'pending_review',
+        views_count: 0,
+        favorites_count: 0,
+        created_at: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+        updated_at: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+        seller: {
+          id: 'sel_01',
+          name: 'Yonas Tadesse',
+          phone_masked: '+251 91 ••• ••34',
+          phone_revealed: '+251 91 123 4534',
+          joined_at: '2023-04-12',
+          verified: true,
+        },
+      },
+      {
+        id: 'cone-pending-202',
+        title: 'MacBook Pro M2 14-inch 16GB/512GB Space Gray',
+        slug: 'macbook-pro-m2-14-sarbet',
+        description: 'Barely used MacBook Pro 14-inch M2 Pro chip, 16GB unified memory, 512GB SSD. Battery cycle count only 24. Original MagSafe charger and box included.',
+        price: 198000,
+        currency: 'ETB',
+        is_negotiable: false,
+        category_id: 'electronics',
+        category_name: 'Electronics & Mobiles',
+        subcategory: 'Laptops & Computers',
+        area: 'Sarbet',
+        condition: 'like_new',
+        images: [
+          'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=1000&q=80',
+        ],
+        attributes: { brand: 'Apple', model: 'MacBook Pro 14 M2', ram: '16GB', storage: '512GB' },
+        status: 'pending_review',
+        views_count: 0,
+        favorites_count: 0,
+        created_at: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+        updated_at: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+        seller: {
+          id: 'usr_me_01',
+          name: 'Addis Ababa Resident',
+          phone_masked: '+251 91 ••• ••67',
+          phone_revealed: '+251 91 123 4567',
+          joined_at: '2024-02-01',
+          verified: true,
+        },
+      },
+    ];
   }
 
   /**
@@ -712,6 +973,19 @@ class ConeApiClient {
       }
 
       if (!response.ok) {
+        if (response.status === 401 && endpoint.startsWith('/admin')) {
+          clearAuthToken();
+          try {
+            localStorage.removeItem(FAVORITES_KEY);
+            localStorage.removeItem(REVEALED_PHONES_KEY);
+          } catch {
+            /* storage unavailable */
+          }
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cone:admin-unauthorized'));
+          }
+        }
+
         const errorPayload: ApiErrorPayload = data || {
           error: {
             code: `HTTP_${response.status}`,
@@ -775,13 +1049,13 @@ class ConeApiClient {
   }
 
   /**
-   * Verify 6-digit OTP code and exchange for bearer token
+   * Verify 6-digit OTP code and exchange for bearer token (or MFA challenge for staff)
    */
   async verifyOtp(
     phone: string,
     code: string,
     privacyConsent: boolean = true
-  ): Promise<AuthResponse> {
+  ): Promise<VerifyOtpResponse> {
     if (!code || code.trim().length !== 6) {
       throw new ConeApiError(
         'INVALID_OTP',
@@ -800,21 +1074,32 @@ class ConeApiClient {
 
     if (this.useMock) {
       await new Promise((res) => setTimeout(res, 500));
-      // In mock mode, allow 123456 or any 6-digit number
       if (code !== '123456' && !/^\d{6}$/.test(code)) {
         throw new ConeApiError('OTP_EXPIRED', 'Invalid or expired verification code. Use 123456 for mock test.');
       }
 
+      const normalizedPhone = phone.startsWith('+251') ? phone : `+251${phone.replace(/^0/, '')}`;
+      const cleanedDigits = phone.replace(/\D/g, '');
+      const isStaffPhone = cleanedDigits.endsWith('9999') || cleanedDigits.endsWith('8888');
+
+      if (isStaffPhone) {
+        return {
+          mfaRequired: true,
+          mfaToken: `mock_mfa_${cleanedDigits}`,
+        };
+      }
+
       const mockUser: User = {
-        id: 'usr_' + phone.replace(/\D/g, '').slice(-6),
-        phone: phone.startsWith('+251') ? phone : `+251${phone.replace(/^0/, '')}`,
+        id: 'usr_' + cleanedDigits.slice(-6),
+        phone: normalizedPhone,
         name: 'Addis User (' + phone.slice(-4) + ')',
-        role: phone.endsWith('9999') ? 'super_admin' : phone.endsWith('8888') ? 'moderator' : 'user',
+        role: 'user',
         privacy_accepted: true,
         avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
         created_at: new Date().toISOString(),
       };
 
+      this.mockUser = mockUser;
       const token = 'mock_jwt_token_' + Math.random().toString(36).substring(2);
       setAuthToken(token);
 
@@ -828,20 +1113,71 @@ class ConeApiClient {
       token?: string;
       user?: ApiUser;
       mfaRequired?: boolean;
+      mfaToken?: string;
     }>('/auth/otp/verify', {
       method: 'POST',
       body: JSON.stringify({ phone, code, consent: privacyConsent }),
     });
 
-    if (result.mfaRequired || !result.token || !result.user) {
+    if (result.mfaRequired && result.mfaToken) {
+      return {
+        mfaRequired: true,
+        mfaToken: result.mfaToken,
+      };
+    }
+
+    if (!result.token || !result.user) {
       throw new ConeApiError(
-        'mfa_required',
-        'Staff accounts need a second step (authenticator code), which this app does not have yet.'
+        'INVALID_RESPONSE',
+        'Unexpected sign-in response from server.'
       );
     }
 
     setAuthToken(result.token);
     return { token: result.token, user: mapUser(result.user) };
+  }
+
+  /**
+   * Verify 6-digit authenticator TOTP code for staff MFA (POST /auth/mfa/verify)
+   */
+  async verifyMfa(mfaToken: string, code: string): Promise<AuthResponse> {
+    if (!code || !/^\d{6}$/.test(code.trim())) {
+      throw new ConeApiError(
+        'INVALID_MFA_CODE',
+        'Please enter the 6-digit code from your authenticator app.',
+        { code: 'Enter a valid 6-digit authenticator code' }
+      );
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 400));
+      const isSuperAdmin = mfaToken.endsWith('9999');
+      const role: User['role'] = isSuperAdmin ? 'super_admin' : 'moderator';
+      const staffUser: User = {
+        id: isSuperAdmin ? 'usr_admin_01' : 'usr_mod_01',
+        phone: isSuperAdmin ? '+251 91 123 9999' : '+251 91 123 8888',
+        name: isSuperAdmin ? 'Sara Tesfaye' : 'Abebe Girma',
+        role,
+        privacy_accepted: true,
+        email: isSuperAdmin ? 'sara.admin@cone.et' : 'abebe.mod@cone.et',
+        area_id: 'Bole',
+        area_name: 'Bole',
+        created_at: '2023-01-15T00:00:00Z',
+      };
+
+      this.mockUser = staffUser;
+      const token = 'mock_staff_jwt_' + Math.random().toString(36).substring(2);
+      setAuthToken(token);
+      return { token, user: staffUser };
+    }
+
+    const res = await this.request<{ token: string; user: ApiUser }>('/auth/mfa/verify', {
+      method: 'POST',
+      body: JSON.stringify({ mfaToken, code: code.trim() }),
+    });
+
+    setAuthToken(res.token);
+    return { token: res.token, user: mapUser(res.user) };
   }
 
   /**
@@ -1699,6 +2035,721 @@ class ConeApiClient {
     await this.request<void>(`/listings/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  // -----------------------------------------------------------
+  // ADMIN ENDPOINTS
+  // -----------------------------------------------------------
+
+  private recordMockAudit(
+    action: string,
+    targetType: string,
+    targetId: string,
+    reason?: string,
+    details?: Record<string, any>
+  ) {
+    this.mockAuditLogs.unshift({
+      id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      createdAt: new Date().toISOString(),
+      actorId: this.mockUser.id,
+      actorName: this.mockUser.name,
+      actorPhone: this.mockUser.phone,
+      actorRole: this.mockUser.role,
+      action,
+      targetType,
+      targetId,
+      reason,
+      details,
+    });
+  }
+
+  /**
+   * Get Admin Dashboard counts (GET /admin/dashboard)
+   */
+  async getAdminDashboard(): Promise<AdminDashboard> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 180));
+      return {
+        pendingListings: this.mockListings.filter(
+          (l) => l.status === 'pending_review' || l.status === 'waiting_for_review'
+        ).length,
+        activeListings: this.mockListings.filter((l) => l.status === 'active').length,
+        openReports: this.mockAdminReports.filter((r) => r.status === 'open').length,
+        totalUsers: this.mockAdminUsers.length,
+        suspendedUsers: this.mockAdminUsers.filter((u) => u.status === 'suspended').length,
+        resolvedReports: this.mockAdminReports.filter((r) => r.status !== 'open').length,
+      };
+    }
+
+    const res = await this.request<Record<string, any>>('/admin/dashboard');
+    return mapAdminDashboard(res);
+  }
+
+  /**
+   * Get Admin moderation queue listings (GET /admin/listings)
+   */
+  async getAdminListings(params: {
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}): Promise<{ items: AdminListingItem[]; total: number; page: number; pageSize: number }> {
+    const status = params.status || 'pending_review';
+    const page = params.page || 1;
+    const pageSize = params.pageSize || 20;
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      const filtered = this.mockListings
+        .filter((l) => {
+          if (status === 'all') return true;
+          if (status === 'pending_review') {
+            return l.status === 'pending_review' || l.status === 'waiting_for_review';
+          }
+          return l.status === status;
+        })
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .map((l) => ({
+          ...l,
+          submitted_at: l.updated_at || l.created_at,
+        }));
+
+      const total = filtered.length;
+      const start = (page - 1) * pageSize;
+      return {
+        items: filtered.slice(start, start + pageSize),
+        total,
+        page,
+        pageSize,
+      };
+    }
+
+    const lookups = await this.getLookups();
+    const qs = new URLSearchParams();
+    if (status && status !== 'all') qs.set('status', status);
+    qs.set('page', String(page));
+    qs.set('pageSize', String(pageSize));
+
+    const res = await this.request<{
+      items: ApiAdminListing[];
+      total?: number;
+      page?: number;
+      pageSize?: number;
+    }>(`/admin/listings?${qs.toString()}`);
+
+    const mapped = (res.items || []).map((i) => mapAdminListing(i, lookups));
+    return {
+      items: mapped,
+      total: res.total ?? mapped.length,
+      page: res.page ?? page,
+      pageSize: res.pageSize ?? pageSize,
+    };
+  }
+
+  /**
+   * Moderate a listing (POST /admin/listings/{id}/moderate)
+   */
+  async moderateAdminListing(
+    id: string,
+    payload: { action: 'approve' | 'reject' | 'remove'; reason?: string }
+  ): Promise<AdminListingItem> {
+    if ((payload.action === 'reject' || payload.action === 'remove') && !payload.reason?.trim()) {
+      throw new ConeApiError('VALIDATION_ERROR', 'A reason is required when rejecting or removing a listing.', {
+        reason: 'Please enter a moderation reason',
+      });
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 250));
+      const idx = this.mockListings.findIndex((l) => l.id === id);
+      if (idx === -1) {
+        throw new ConeApiError('NOT_FOUND', 'Listing not found');
+      }
+      const target = this.mockListings[idx];
+      if (target.seller.id === this.mockUser.id) {
+        throw new ConeApiError('SELF_MODERATION_FORBIDDEN', 'Staff members cannot moderate their own listings.');
+      }
+
+      if (payload.action === 'approve') {
+        target.status = 'active';
+        target.rejection_reason = undefined;
+      } else if (payload.action === 'reject') {
+        target.status = 'rejected';
+        target.rejection_reason = payload.reason?.trim();
+      } else {
+        target.status = 'rejected';
+        target.rejection_reason = payload.reason?.trim();
+      }
+      target.updated_at = new Date().toISOString();
+
+      this.recordMockAudit(`listing.${payload.action}`, 'listing', id, payload.reason?.trim());
+      return { ...target, submitted_at: target.created_at };
+    }
+
+    const lookups = await this.getLookups();
+    const body: { action: 'approve' | 'reject' | 'remove'; reason?: string } = {
+      action: payload.action,
+    };
+    if (payload.reason?.trim()) {
+      body.reason = payload.reason.trim();
+    }
+
+    const res = await this.request<ApiAdminListing>(`/admin/listings/${id}/moderate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return mapAdminListing(res, lookups);
+  }
+
+  /**
+   * Get Admin reports queue (GET /admin/reports)
+   */
+  async getAdminReports(params: {
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}): Promise<{ items: AdminReport[]; total: number; page: number; pageSize: number }> {
+    const page = params.page || 1;
+    const pageSize = params.pageSize || 20;
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      const filtered = this.mockAdminReports.filter((r) =>
+        params.status && params.status !== 'all' ? r.status === params.status : true
+      );
+      const total = filtered.length;
+      const start = (page - 1) * pageSize;
+      return {
+        items: filtered.slice(start, start + pageSize),
+        total,
+        page,
+        pageSize,
+      };
+    }
+
+    const qs = new URLSearchParams();
+    if (params.status && params.status !== 'all') qs.set('status', params.status);
+    qs.set('page', String(page));
+    qs.set('pageSize', String(pageSize));
+
+    const res = await this.request<{
+      items: ApiAdminReport[];
+      total?: number;
+      page?: number;
+      pageSize?: number;
+    }>(`/admin/reports?${qs.toString()}`);
+
+    const mapped = (res.items || []).map(mapAdminReport);
+    return {
+      items: mapped,
+      total: res.total ?? mapped.length,
+      page: res.page ?? page,
+      pageSize: res.pageSize ?? pageSize,
+    };
+  }
+
+  /**
+   * Resolve a report (POST /admin/reports/{id}/resolve)
+   */
+  async resolveAdminReport(
+    id: string,
+    payload: { action: string; note?: string }
+  ): Promise<AdminReport> {
+    if (!payload.action) {
+      throw new ConeApiError('VALIDATION_ERROR', 'Resolution action is required.', {
+        action: 'Select an action',
+      });
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 250));
+      const report = this.mockAdminReports.find((r) => r.id === id);
+      if (!report) {
+        throw new ConeApiError('NOT_FOUND', 'Report not found');
+      }
+      report.status = payload.action === 'dismiss' ? 'dismissed' : 'resolved';
+      report.resolutionAction = payload.action;
+      report.resolutionNote = payload.note?.trim() || undefined;
+      report.resolvedAt = new Date().toISOString();
+
+      if (payload.action === 'remove_listing') {
+        const listing = this.mockListings.find((l) => l.id === report.listingId);
+        if (listing) {
+          listing.status = 'rejected';
+          listing.rejection_reason = payload.note?.trim() || 'Removed after user report';
+        }
+      }
+
+      this.recordMockAudit('report.resolve', 'report', id, payload.note?.trim(), {
+        action: payload.action,
+      });
+      return { ...report };
+    }
+
+    const body: Record<string, any> = { action: payload.action };
+    if (payload.note?.trim()) {
+      body.note = payload.note.trim();
+    }
+
+    const res = await this.request<ApiAdminReport>(`/admin/reports/${id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return mapAdminReport(res);
+  }
+
+  /**
+   * Search Admin users (GET /admin/users)
+   */
+  async getAdminUsers(params: {
+    q?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}): Promise<{ items: AdminUser[]; total: number; page: number; pageSize: number }> {
+    const page = params.page || 1;
+    const pageSize = params.pageSize || 20;
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      const q = params.q?.trim().toLowerCase() || '';
+      const filtered = this.mockAdminUsers.filter((u) => {
+        if (!q) return true;
+        return (
+          u.id.toLowerCase().includes(q) ||
+          u.name.toLowerCase().includes(q) ||
+          u.phone.replace(/\s+/g, '').toLowerCase().includes(q.replace(/\s+/g, ''))
+        );
+      });
+      const total = filtered.length;
+      const start = (page - 1) * pageSize;
+      return {
+        items: filtered.slice(start, start + pageSize),
+        total,
+        page,
+        pageSize,
+      };
+    }
+
+    const qs = new URLSearchParams();
+    if (params.q?.trim()) qs.set('q', params.q.trim());
+    qs.set('page', String(page));
+    qs.set('pageSize', String(pageSize));
+
+    const res = await this.request<{
+      items: ApiAdminUser[];
+      total?: number;
+      page?: number;
+      pageSize?: number;
+    }>(`/admin/users?${qs.toString()}`);
+
+    const mapped = (res.items || []).map(mapAdminUser);
+    return {
+      items: mapped,
+      total: res.total ?? mapped.length,
+      page: res.page ?? page,
+      pageSize: res.pageSize ?? pageSize,
+    };
+  }
+
+  /**
+   * Suspend or reactivate a user (POST /admin/users/{id}/status)
+   */
+  async updateAdminUserStatus(
+    id: string,
+    payload: { status: 'active' | 'suspended'; reason: string }
+  ): Promise<AdminUser> {
+    if (!payload.reason?.trim()) {
+      throw new ConeApiError('VALIDATION_ERROR', 'A reason is required to change user status.', {
+        reason: 'Please enter a reason',
+      });
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 250));
+      const user = this.mockAdminUsers.find((u) => u.id === id);
+      if (!user) {
+        throw new ConeApiError('NOT_FOUND', 'User not found');
+      }
+      if (user.id === this.mockUser.id) {
+        throw new ConeApiError('FORBIDDEN', 'You cannot suspend your own account.');
+      }
+      user.status = payload.status;
+      user.statusReason = payload.reason.trim();
+      this.recordMockAudit(`user.${payload.status}`, 'user', id, payload.reason.trim());
+      return { ...user };
+    }
+
+    const res = await this.request<ApiAdminUser>(`/admin/users/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: payload.status,
+        reason: payload.reason.trim(),
+      }),
+    });
+    return mapAdminUser(res);
+  }
+
+  /**
+   * Change a user's role - Super Admin only (POST /admin/users/{id}/role)
+   */
+  async updateAdminUserRole(
+    id: string,
+    role: User['role']
+  ): Promise<AdminUserRoleUpdateResult> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 300));
+      const user = this.mockAdminUsers.find((u) => u.id === id);
+      if (!user) {
+        throw new ConeApiError('NOT_FOUND', 'User not found');
+      }
+      const wasRegular = user.role === 'user';
+      user.role = role;
+      this.recordMockAudit('user.role_change', 'user', id, undefined, { role });
+
+      const mfaSetupUri =
+        wasRegular && role !== 'user'
+          ? `otpauth://totp/Cone:${encodeURIComponent(user.phone.replace(/\s+/g, ''))}?secret=JBSWY3DPEHPK3PXP&issuer=Cone`
+          : null;
+
+      return {
+        user: { ...user },
+        mfaSetupUri,
+      };
+    }
+
+    const res = await this.request<
+      ({ user: ApiAdminUser; mfaSetupUri?: string | null }) | (ApiAdminUser & { mfaSetupUri?: string | null })
+    >(`/admin/users/${id}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+
+    const apiUser = 'user' in res && res.user ? res.user : (res as ApiAdminUser);
+    return {
+      user: mapAdminUser(apiUser),
+      mfaSetupUri: res.mfaSetupUri ?? null,
+    };
+  }
+
+  /**
+   * List admin categories tree (GET /admin/categories)
+   */
+  async getAdminCategories(): Promise<AdminCategory[]> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 180));
+      return JSON.parse(JSON.stringify(this.mockAdminCategories));
+    }
+
+    const res = await this.request<{ items?: ApiAdminCategory[] } | ApiAdminCategory[]>(
+      '/admin/categories'
+    );
+    const items = Array.isArray(res) ? res : res.items || [];
+    return items.map(mapAdminCategory);
+  }
+
+  /**
+   * Create category or subcategory (POST /admin/categories)
+   */
+  async createAdminCategory(payload: {
+    parentId: string | null;
+    name: string;
+    slug: string;
+    fields?: CategoryFieldDef[];
+    sortOrder?: number;
+    isActive?: boolean;
+  }): Promise<AdminCategory> {
+    if (!payload.name.trim()) {
+      throw new ConeApiError('VALIDATION_ERROR', 'Category name is required.', {
+        name: 'Name is required',
+      });
+    }
+    if (!payload.slug.trim()) {
+      throw new ConeApiError('VALIDATION_ERROR', 'Category slug is required.', {
+        slug: 'Slug is required',
+      });
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 220));
+      const created: AdminCategory = {
+        id: `cat_${Date.now()}`,
+        parentId: payload.parentId || null,
+        name: payload.name.trim(),
+        slug: payload.slug.trim().toLowerCase(),
+        sortOrder: payload.sortOrder ?? 99,
+        isActive: payload.isActive ?? true,
+        fields: payload.fields ?? [],
+        children: [],
+      };
+      if (created.parentId) {
+        const parent = this.mockAdminCategories.find((c) => c.id === created.parentId);
+        if (parent) parent.children.push(created);
+      } else {
+        this.mockAdminCategories.push(created);
+      }
+      this.recordMockAudit('category.create', 'category', created.id, undefined, { name: created.name });
+      return created;
+    }
+
+    const body: Record<string, any> = {
+      parentId: payload.parentId || null,
+      name: payload.name.trim(),
+      slug: payload.slug.trim().toLowerCase(),
+      fields: (payload.fields ?? []).map((f) => ({
+        key: f.key,
+        label: f.label,
+        type: f.type,
+        required: Boolean(f.required),
+        ...(f.type === 'select' && f.options ? { options: f.options } : {}),
+      })),
+    };
+    if (payload.sortOrder !== undefined) body.sortOrder = payload.sortOrder;
+    if (payload.isActive !== undefined) body.isActive = payload.isActive;
+
+    const res = await this.request<ApiAdminCategory>('/admin/categories', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    this.lookups = null;
+    return mapAdminCategory(res);
+  }
+
+  /**
+   * Update category or subcategory (PATCH /admin/categories/{id})
+   */
+  async updateAdminCategory(
+    id: string,
+    payload: {
+      parentId?: string | null;
+      name?: string;
+      slug?: string;
+      fields?: CategoryFieldDef[];
+      sortOrder?: number;
+      isActive?: boolean;
+    }
+  ): Promise<AdminCategory> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 220));
+      const findCat = (list: AdminCategory[]): AdminCategory | undefined => {
+        for (const c of list) {
+          if (c.id === id) return c;
+          const foundChild = c.children.find((ch) => ch.id === id);
+          if (foundChild) return foundChild;
+        }
+        return undefined;
+      };
+      const cat = findCat(this.mockAdminCategories);
+      if (!cat) {
+        throw new ConeApiError('NOT_FOUND', 'Category not found');
+      }
+      if (payload.name !== undefined) cat.name = payload.name.trim();
+      if (payload.slug !== undefined) cat.slug = payload.slug.trim().toLowerCase();
+      if (payload.fields !== undefined) cat.fields = payload.fields;
+      if (payload.sortOrder !== undefined) cat.sortOrder = payload.sortOrder;
+      if (payload.isActive !== undefined) cat.isActive = payload.isActive;
+
+      this.recordMockAudit('category.update', 'category', id, undefined, { name: cat.name });
+      return { ...cat };
+    }
+
+    const body: Record<string, any> = {};
+    if (payload.parentId !== undefined) body.parentId = payload.parentId;
+    if (payload.name !== undefined) body.name = payload.name.trim();
+    if (payload.slug !== undefined) body.slug = payload.slug.trim().toLowerCase();
+    if (payload.sortOrder !== undefined) body.sortOrder = payload.sortOrder;
+    if (payload.isActive !== undefined) body.isActive = payload.isActive;
+    if (payload.fields !== undefined) {
+      body.fields = payload.fields.map((f) => ({
+        key: f.key,
+        label: f.label,
+        type: f.type,
+        required: Boolean(f.required),
+        ...(f.type === 'select' && f.options ? { options: f.options } : {}),
+      }));
+    }
+
+    const res = await this.request<ApiAdminCategory>(`/admin/categories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    this.lookups = null;
+    return mapAdminCategory(res);
+  }
+
+  /**
+   * List admin areas (GET /admin/areas)
+   */
+  async getAdminAreas(): Promise<AdminArea[]> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 160));
+      return [...this.mockAdminAreas];
+    }
+
+    const res = await this.request<{ items?: ApiAdminArea[] } | ApiAdminArea[]>('/admin/areas');
+    const items = Array.isArray(res) ? res : res.items || [];
+    return items.map(mapAdminArea);
+  }
+
+  /**
+   * Create area (POST /admin/areas)
+   */
+  async createAdminArea(payload: {
+    name: string;
+    parentId?: string | null;
+    isActive?: boolean;
+    sortOrder?: number;
+  }): Promise<AdminArea> {
+    if (!payload.name.trim()) {
+      throw new ConeApiError('VALIDATION_ERROR', 'Area name is required.', {
+        name: 'Name is required',
+      });
+    }
+
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      const area: AdminArea = {
+        id: `area_${Date.now()}`,
+        parentId: payload.parentId ?? null,
+        name: payload.name.trim(),
+        isActive: payload.isActive ?? true,
+        sortOrder: payload.sortOrder ?? this.mockAdminAreas.length + 1,
+      };
+      this.mockAdminAreas.push(area);
+      this.recordMockAudit('area.create', 'area', area.id, undefined, { name: area.name });
+      return area;
+    }
+
+    const body: Record<string, any> = {
+      name: payload.name.trim(),
+      parentId: payload.parentId ?? null,
+    };
+    if (payload.isActive !== undefined) body.isActive = payload.isActive;
+    if (payload.sortOrder !== undefined) body.sortOrder = payload.sortOrder;
+
+    const res = await this.request<ApiAdminArea>('/admin/areas', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    this.lookups = null;
+    return mapAdminArea(res);
+  }
+
+  /**
+   * Update area (PATCH /admin/areas/{id})
+   */
+  async updateAdminArea(
+    id: string,
+    payload: {
+      name?: string;
+      parentId?: string | null;
+      isActive?: boolean;
+      sortOrder?: number;
+    }
+  ): Promise<AdminArea> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 200));
+      const area = this.mockAdminAreas.find((a) => a.id === id);
+      if (!area) {
+        throw new ConeApiError('NOT_FOUND', 'Area not found');
+      }
+      if (payload.name !== undefined) area.name = payload.name.trim();
+      if (payload.parentId !== undefined) area.parentId = payload.parentId;
+      if (payload.isActive !== undefined) area.isActive = payload.isActive;
+      if (payload.sortOrder !== undefined) area.sortOrder = payload.sortOrder;
+      this.recordMockAudit('area.update', 'area', id, undefined, { name: area.name });
+      return { ...area };
+    }
+
+    const body: Record<string, any> = {};
+    if (payload.name !== undefined) body.name = payload.name.trim();
+    if (payload.parentId !== undefined) body.parentId = payload.parentId;
+    if (payload.isActive !== undefined) body.isActive = payload.isActive;
+    if (payload.sortOrder !== undefined) body.sortOrder = payload.sortOrder;
+
+    const res = await this.request<ApiAdminArea>(`/admin/areas/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    this.lookups = null;
+    return mapAdminArea(res);
+  }
+
+  /**
+   * Get Admin settings (GET /admin/settings)
+   */
+  async getAdminSettings(): Promise<AdminSettings> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 180));
+      return { ...this.mockAdminSettings };
+    }
+
+    const res = await this.request<{ settings?: AdminSettings } & AdminSettings>('/admin/settings');
+    if (res && typeof res.settings === 'object' && res.settings !== null) {
+      return res.settings;
+    }
+    return res;
+  }
+
+  /**
+   * Update Admin settings (PUT /admin/settings)
+   */
+  async updateAdminSettings(settings: AdminSettings): Promise<AdminSettings> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 250));
+      this.mockAdminSettings = { ...settings };
+      this.recordMockAudit('settings.update', 'settings', 'global', undefined, settings);
+      return { ...this.mockAdminSettings };
+    }
+
+    const res = await this.request<{ settings?: AdminSettings } & AdminSettings>('/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+    if (res && typeof res.settings === 'object' && res.settings !== null) {
+      return res.settings;
+    }
+    return res;
+  }
+
+  /**
+   * Get paginated Audit Log, newest first (GET /admin/audit-log)
+   */
+  async getAdminAuditLog(
+    page: number = 1,
+    pageSize: number = 25
+  ): Promise<{ items: AuditLogEntry[]; total: number; page: number; pageSize: number }> {
+    if (this.useMock) {
+      await new Promise((res) => setTimeout(res, 180));
+      const sorted = [...this.mockAuditLogs].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      const total = sorted.length;
+      const start = (page - 1) * pageSize;
+      return {
+        items: sorted.slice(start, start + pageSize),
+        total,
+        page,
+        pageSize,
+      };
+    }
+
+    const qs = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    const res = await this.request<{
+      items: ApiAuditLogEntry[];
+      total?: number;
+      page?: number;
+      pageSize?: number;
+    }>(`/admin/audit-log?${qs.toString()}`);
+
+    const mapped = (res.items || []).map(mapAuditLogEntry);
+    return {
+      items: mapped,
+      total: res.total ?? mapped.length,
+      page: res.page ?? page,
+      pageSize: res.pageSize ?? pageSize,
+    };
   }
 }
 

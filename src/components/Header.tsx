@@ -8,6 +8,7 @@ import {
   Heart,
   LogOut,
   ChevronDown,
+  ShieldCheck,
 } from 'lucide-react';
 import { useRouter } from '../context/RouterContext';
 import { useAuth } from '../context/AuthContext';
@@ -180,6 +181,24 @@ export const Header: React.FC = () => {
                         </div>
                       )}
                     </div>
+
+                    {(user.role === 'moderator' || user.role === 'super_admin') && (
+                      <button
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          navigate('/admin');
+                        }}
+                        className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-900 bg-slate-50/70 hover:bg-emerald-50 flex items-center justify-between border-b border-slate-100"
+                      >
+                        <span className="flex items-center gap-2">
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>{t.nav.admin}</span>
+                        </span>
+                        <span className="text-[10px] bg-slate-900 text-emerald-400 font-bold px-1.5 py-0.5 rounded uppercase">
+                          {user.role === 'super_admin' ? 'Super' : 'Mod'}
+                        </span>
+                      </button>
+                    )}
 
                     <button
                       onClick={() => {
