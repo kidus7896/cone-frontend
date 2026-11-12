@@ -638,3 +638,15 @@ export function mapAuditLogEntry(e: ApiAuditLogEntry): AuditLogEntry {
   };
 }
 
+
+// The backend returns admin categories as a flat list; the admin screen wants a tree.
+export function nestAdminCategories<T extends { id: string; parentId?: string | null; children?: T[] }>(rows: T[]): T[] {
+  const byId = new Map(rows.map((r) => [r.id, { ...r, children: [] as T[] }]));
+  const roots: T[] = [];
+  for (const r of byId.values()) {
+    const parent = r.parentId ? byId.get(r.parentId) : undefined;
+    if (parent) parent.children!.push(r as T);
+    else roots.push(r as T);
+  }
+  return roots;
+}

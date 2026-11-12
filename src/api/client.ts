@@ -34,6 +34,7 @@ import {
   mapReportReason,
   mapSeller,
   mapUser,
+  nestAdminCategories,
   mapFieldErrors,
   resolveLeafCategoryId,
   coerceAttributes,
@@ -2227,7 +2228,9 @@ class ConeApiClient {
     }
 
     const qs = new URLSearchParams();
-    if (params.status && params.status !== 'all') qs.set('status', params.status);
+    if (params.status && params.status !== 'all') {
+      qs.set('status', params.status === 'open' ? 'open' : 'resolved'); // "dismissed" is a kind of resolved
+    }
     qs.set('page', String(page));
     qs.set('pageSize', String(pageSize));
 
@@ -2285,10 +2288,13 @@ class ConeApiClient {
       return { ...report };
     }
 
-    const body: Record<string, any> = { action: payload.action };
-    if (payload.note?.trim()) {
-      body.note = payload.note.trim();
-    }
+    // The backend needs a note; fall back to a short default when the form left it empty.
+    const body = {
+      action: payload.action === 'remove_listing' ? 'remove_listing' : 'dismiss',
+      note:
+        payload.note?.trim() ||
+        (payload.action === 'remove_listing' ? 'Listing removed after report' : 'Report dismissed'),
+    };
 
     const res = await this.request<ApiAdminReport>(`/admin/reports/${id}/resolve`, {
       method: 'POST',
@@ -2381,7 +2387,7 @@ class ConeApiClient {
     const res = await this.request<ApiAdminUser>(`/admin/users/${id}/status`, {
       method: 'POST',
       body: JSON.stringify({
-        status: payload.status,
+        action: payload.status === 'suspended' ? 'suspend' : 'reactivate',
         reason: payload.reason.trim(),
       }),
     });
@@ -2443,7 +2449,7 @@ class ConeApiClient {
       '/admin/categories'
     );
     const items = Array.isArray(res) ? res : res.items || [];
-    return items.map(mapAdminCategory);
+    return nestAdminCategories(items).map(mapAdminCategory);
   }
 
   /**
@@ -2493,7 +2499,6 @@ class ConeApiClient {
     const body: Record<string, any> = {
       parentId: payload.parentId || null,
       name: payload.name.trim(),
-      slug: payload.slug.trim().toLowerCase(),
       fields: (payload.fields ?? []).map((f) => ({
         key: f.key,
         label: f.label,
@@ -2502,8 +2507,9 @@ class ConeApiClient {
         ...(f.type === 'select' && f.options ? { options: f.options } : {}),
       })),
     };
-    if (payload.sortOrder !== undefined) body.sortOrder = payload.sortOrder;
-    if (payload.isActive !== undefined) body.isActive = payload.isActive;
+    // The backend makes the slug itself and calls sortOrder "order" and isActive "active".
+    if (payload.sortOrder !== undefined) body.order = payload.sortOrder;
+    if (payload.isActive !== undefined) body.active = payload.isActive;
 
     const res = await this.request<ApiAdminCategory>('/admin/categories', {
       method: 'POST',
@@ -2552,11 +2558,10 @@ class ConeApiClient {
     }
 
     const body: Record<string, any> = {};
-    if (payload.parentId !== undefined) body.parentId = payload.parentId;
+    // The backend cannot move a category or change its slug: only name, order, active and fields.
     if (payload.name !== undefined) body.name = payload.name.trim();
-    if (payload.slug !== undefined) body.slug = payload.slug.trim().toLowerCase();
-    if (payload.sortOrder !== undefined) body.sortOrder = payload.sortOrder;
-    if (payload.isActive !== undefined) body.isActive = payload.isActive;
+    if (payload.sortOrder !== undefined) body.order = payload.sortOrder;
+    if (payload.isActive !== undefined) body.active = payload.isActive;
     if (payload.fields !== undefined) {
       body.fields = payload.fields.map((f) => ({
         key: f.key,
@@ -2622,8 +2627,7 @@ class ConeApiClient {
       name: payload.name.trim(),
       parentId: payload.parentId ?? null,
     };
-    if (payload.isActive !== undefined) body.isActive = payload.isActive;
-    if (payload.sortOrder !== undefined) body.sortOrder = payload.sortOrder;
+    if (payload.isActive !== undefined) body.active = payload.isActive; // areas have no sort order in the backend
 
     const res = await this.request<ApiAdminArea>('/admin/areas', {
       method: 'POST',
@@ -2662,8 +2666,7 @@ class ConeApiClient {
     const body: Record<string, any> = {};
     if (payload.name !== undefined) body.name = payload.name.trim();
     if (payload.parentId !== undefined) body.parentId = payload.parentId;
-    if (payload.isActive !== undefined) body.isActive = payload.isActive;
-    if (payload.sortOrder !== undefined) body.sortOrder = payload.sortOrder;
+    if (payload.isActive !== undefined) body.active = payload.isActive; // areas have no sort order in the backend
 
     const res = await this.request<ApiAdminArea>(`/admin/areas/${id}`, {
       method: 'PATCH',
